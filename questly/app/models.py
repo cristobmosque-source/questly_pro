@@ -32,7 +32,13 @@ COLORS = [
     ("lime", "#8bc34a"),
 ]
 
-REPEAT_CHOICES = ["daily", "weekly", "once"]
+REPEAT_CHOICES = ["daily", "weekly", "once", "custom_days"]
+
+# Day labels for custom_days quests, indexed like Python's date.weekday():
+# 0 = Monday ... 6 = Sunday.
+WEEKDAY_LABELS = [
+    "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo",
+]
 
 STOCK_PERIODS = ["daily", "weekly", "monthly"]
 STOCK_SCOPES = ["child", "family"]
@@ -88,7 +94,9 @@ def oid(value):
 
 def period_key(repeat, local_now):
     """Which bucket a claim or purchase falls into, in the family's local time."""
-    if repeat == "daily":
+    if repeat in ("daily", "custom_days"):
+        # A custom_days quest gets its own bucket per local date, so each
+        # selected day starts fresh.
         return local_now.strftime("%Y-%m-%d")
     if repeat == "weekly":
         year, week, _ = local_now.isocalendar()
@@ -327,13 +335,17 @@ def adjust_points(db, kid_id, delta, reason, actor, kind="award"):
     if not _id:
         return None, None
 
-    delta = int(delta)
+    # Penalties can be halves (a missed 15-point quest costs 7.5), so keep
+    # fractional deltas instead of truncating them to whole points.
+    delta = float(delta)
+    if delta == int(delta):
+        delta = int(delta)
     if delta < 0:
         # Clamp a deduction to whatever the kid actually has.
         current = db.users.find_one({"_id": _id}, {"points": 1})
         if not current:
             return None, None
-        delta = -min(-delta, int(current.get("points", 0)))
+        delta = -min(-delta, float(current.get("points", 0)))
 
     inc = {"points": delta}
     if delta > 0:
@@ -648,11 +660,21 @@ def quests_for_kid(db, kid, local_now):
         if assigned and kid["_id"] not in assigned:
             continue
 
+        # A custom_days quest only appears on the days it was given.
+        if quest.get("repeat") == "custom_days":
+            days = quest.get("repeat_days") or []
+            if local_now.weekday() not in days:
+                continue
+
         key = period_key(quest.get("repeat", "daily"), local_now)
         limit = quest_times(quest)
         claims = quest_claims_in_period(db, quest, kid, key)
         approved = sum(1 for c in claims if c["status"] == "approved")
         pending = sum(1 for c in claims if c["status"] == "pending")
+        missed = db.quest_claims.find_one({
+            "quest_id": quest["_id"], "kid_id": kid["_id"], "period": key,
+            "status": "missed",
+        }) is not None
 
         quest = dict(quest)
         subtasks = quest.get("subtasks") or []
@@ -666,7 +688,11 @@ def quests_for_kid(db, kid, local_now):
         quest["done_count"] = approved
         quest["pending_count"] = pending
         quest["used"] = approved + pending
-        if quest["used"] < limit:
+        quest["missed"] = missed
+        if missed:
+            # Closed for this period: an adult marked it as not done.
+            quest["state"] = "missed"
+        elif quest["used"] < limit:
             quest["state"] = "open"
         elif pending:
             quest["state"] = "pending"
@@ -683,6 +709,12 @@ def claim_quest(db, quest, kid, local_now):
 
     key = period_key(quest.get("repeat", "daily"), local_now)
     limit = quest_times(quest)
+    # A quest an adult marked as not done is closed for this period.
+    if db.quest_claims.find_one({
+        "quest_id": quest["_id"], "kid_id": kid["_id"], "period": key,
+        "status": "missed",
+    }):
+        return None, "That one was marked as not done — better luck next time."
     used = len(quest_claims_in_period(db, quest, kid, key))
     if used >= limit:
         return None, _quest_all_done(quest, limit)
@@ -730,7 +762,8 @@ def claim_quest(db, quest, kid, local_now):
 
 
 def _quest_all_done(quest, limit):
-    per = {"daily": "today", "weekly": "this week"}.get(
+    per = {"daily": "today", "custom_days": "today",
+           "weekly": "this week"}.get(
         quest.get("repeat", "daily"), "already")
     if limit == 1:
         return "You've already sent that one in."
@@ -760,6 +793,77 @@ def decide_quest_claim(db, claim_id, approve, actor):
             f"Quest: {claim['quest_title']}", actor, kind="quest",
         )
     return claim
+
+
+def mark_quest_missed(db, quest, kid, local_now, actor):
+    """An adult records that a child did not do a recurring quest. The quest
+    is closed for this period (status "missed", kept clearly apart from
+    "rejected") and half its points come off the balance straight away —
+    no approval round-trip. Returns (claim, error_message)."""
+    from pymongo.errors import DuplicateKeyError
+
+    if quest.get("repeat") not in ("daily", "custom_days"):
+        return None, ("Only daily and pick-your-days quests can be marked "
+                      "as not done.")
+    if quest.get("repeat") == "custom_days" and \
+            local_now.weekday() not in (quest.get("repeat_days") or []):
+        return None, "That quest isn't scheduled for today."
+
+    key = period_key(quest["repeat"], local_now)
+    existing = db.quest_claims.find_one({
+        "quest_id": quest["_id"], "kid_id": kid["_id"], "period": key,
+        "status": {"$in": ["pending", "approved", "missed"]},
+    })
+    if existing:
+        if existing["status"] == "missed":
+            return None, "That one is already marked as not done."
+        return None, f"{kid['name']} already sent that one in — check approvals."
+
+    # Half the quest's value, kept as a fraction when the points are odd
+    # (a missed 15-point quest costs 7.5).
+    penalty = quest["points"] / 2
+    if penalty == int(penalty):
+        penalty = int(penalty)
+
+    # Same slot logic as a normal claim so the unique index keeps the
+    # numbering honest.
+    highest = db.quest_claims.find_one(
+        {"quest_id": quest["_id"], "kid_id": kid["_id"], "period": key},
+        sort=[("seq", -1)], projection={"seq": 1},
+    )
+    seq = int((highest or {}).get("seq") or -1) + 1
+
+    base = {
+        "quest_id": quest["_id"],
+        "kid_id": kid["_id"],
+        "kid_name": kid["name"],
+        "kid_avatar": kid.get("avatar"),
+        "quest_title": quest["title"],
+        "quest_emoji": quest.get("emoji", "✅"),
+        "points": int(quest["points"]),
+        "penalty": -penalty,
+        "period": key,
+        "status": "missed",
+        "created_at": now(),
+        "decided_at": now(),
+        "decided_by": actor.get("name") if actor else None,
+        "applied_by": actor.get("_id") if actor else None,
+    }
+    for attempt in range(3):                 # lose a race, take the next slot
+        doc = dict(base, seq=seq + attempt)
+        try:
+            db.quest_claims.insert_one(doc)
+            break
+        except DuplicateKeyError:
+            continue
+    else:
+        return None, "That didn't go through — try again."
+
+    # The deduction goes straight through the points ledger so the history
+    # and the balance can never drift apart.
+    adjust_points(db, kid["_id"], -penalty,
+                  f"Missed: {quest['title']}", actor, kind="missed")
+    return doc, None
 
 
 def pending_claims(db):

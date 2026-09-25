@@ -32,6 +32,17 @@
         {% for r in repeats %}<option value="{{ r }}">{{ r | capitalize }}</option>{% endfor %}
       </select>
     </label>
+    <fieldset class="field field--full daypick" hidden>
+      <span>Días <em>(elige al menos uno)</em></span>
+      <div class="whochips">
+        {% for day in weekdays %}
+          <label class="whochip" style="--kid:#7c4dff">
+            <input type="checkbox" name="repeat_days" value="{{ loop.index0 }}">
+            <span>{{ day }}</span>
+          </label>
+        {% endfor %}
+      </div>
+    </fieldset>
     <label class="field field--num">
       <span>Times each</span>
       <input name="times_per_period" type="number" min="1" max="20" value="1" inputmode="numeric">
@@ -69,6 +80,9 @@
         <span class="rowcard__title">
           {{ q.title }}
           <em class="tag">{{ (q.times_per_period or 1) ~ "× " if (q.times_per_period or 1) > 1 }}{{ q.repeat }}</em>
+          {% if q.repeat == 'custom_days' and q.repeat_days %}
+            <em class="tag">{{ q.repeat_days | length }} days</em>
+          {% endif %}
           {% if not q.active %}<em class="tag">paused</em>{% endif %}
           {% if q.subtasks %}<em class="tag">{{ q.subtasks | length }} steps</em>{% endif %}
           {% if q.assigned_to %}
@@ -101,6 +115,18 @@
             {% endfor %}
           </select>
         </label>
+        <fieldset class="field field--full daypick" hidden>
+          <span>Días <em>(elige al menos uno)</em></span>
+          <div class="whochips">
+            {% for day in weekdays %}
+              <label class="whochip" style="--kid:#7c4dff">
+                <input type="checkbox" name="repeat_days" value="{{ loop.index0 }}"
+                       {{ 'checked' if loop.index0 in (q.repeat_days or []) }}>
+                <span>{{ day }}</span>
+              </label>
+            {% endfor %}
+          </div>
+        </fieldset>
         <label class="field field--num">
           <span>Times each</span>
           <input name="times_per_period" type="number" min="1" max="20"
@@ -144,4 +170,20 @@
     </div>
   {% endfor %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Show the day checkboxes only when "custom_days" is the chosen repeat.
+  function syncDaypicks() {
+    document.querySelectorAll("select[name='repeat']").forEach((sel) => {
+      const pick = sel.closest("form").querySelector(".daypick");
+      if (pick) pick.hidden = sel.value !== "custom_days";
+    });
+  }
+  document.addEventListener("change", (e) => {
+    if (e.target.matches("select[name='repeat']")) syncDaypicks();
+  });
+  syncDaypicks();
+</script>
 {% endblock %}

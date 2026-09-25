@@ -187,7 +187,11 @@ def _register_filters(app):
 
     @app.template_filter("signed")
     def fmt_signed(value):
-        value = int(value or 0)
+        # Penalties can be halves (a missed 15-point quest costs 7.5), so
+        # keep the fraction instead of truncating it.
+        value = float(value or 0)
+        if value == int(value):
+            value = int(value)
         return f"+{value}" if value > 0 else str(value)
 
     app.jinja_env.globals["local_now"] = lambda: datetime.now(tz)

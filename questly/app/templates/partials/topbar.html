@@ -8,6 +8,7 @@
 
     <nav class="topnav">
       <a href="{{ url_for('parent.dashboard') }}" class="{{ 'is-active' if request.endpoint == 'parent.dashboard' }}">Home</a>
+      <a href="{{ url_for('parent.today') }}" class="{{ 'is-active' if request.endpoint == 'parent.today' }}">Today</a>
       <a href="{{ url_for('parent.approvals') }}" class="{{ 'is-active' if request.endpoint == 'parent.approvals' }}">
         Approvals
         {% if approvals_waiting %}<span class="pip">{{ approvals_waiting }}</span>{% endif %}

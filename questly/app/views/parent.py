@@ -3,13 +3,15 @@ from flask import (Blueprint, flash, g, jsonify, redirect, render_template,
 
 from ..db import get_db
 from ..models import (AVATARS, COLORS, PARENT_AVATARS, REPEAT_CHOICES,
-                      STOCK_PERIODS, STOCK_SCOPES, adjust_points, check_password,
+                      STOCK_PERIODS, STOCK_SCOPES, WEEKDAY_LABELS,
+                      adjust_points, check_password,
                       parse_subtasks,
                       create_kid, create_parent, decide_quest_claim,
                       decide_redemption, get_quest, get_reward, get_user,
                       history_for, list_kids, list_parents, list_quests,
-                      list_rewards, oid, pending_claims, pending_redemptions,
-                      recent_activity, redemptions_for, set_kid_pin,
+                      list_rewards, mark_quest_missed, oid, pending_claims,
+                      pending_redemptions, quests_for_kid, recent_activity,
+                      redemptions_for, set_kid_pin,
                       add_channel, get_channel, remove_channel,
                       update_channel,
                       set_parent_password, stock_label, stock_mode,
@@ -18,7 +20,7 @@ from ..notify import (CHANNELS, channel_summary, compose, deliver,
                       signal_groups,
                       events_for, mark_all_read, notify, notify_many,
                       recent)
-from .helpers import as_int, check_goal_reached, parent_required, safe_next
+from .helpers import as_int, check_goal_reached, local_now, parent_required, safe_next
 
 bp = Blueprint("parent", __name__, url_prefix="/parent")
 
@@ -158,6 +160,52 @@ def decide_claim_route(claim_id):
 
 
 # ---------------------------------------------------------------------------
+# today's quests + missed penalties
+# ---------------------------------------------------------------------------
+
+def _penalty_text(points):
+    """Half a quest's value, written the way a grown-up would say it."""
+    half = int(points) / 2
+    return f"{half:g}".replace(".", ",")
+
+
+@bp.get("/today")
+@parent_required
+def today():
+    """One clear place to see today's recurring quests per child, and mark
+    anything that wasn't done."""
+    db = get_db()
+    now = local_now()
+    rows = []
+    for kid in list_kids(db):
+        quests = [q for q in quests_for_kid(db, kid, now)
+                  if q["repeat"] in ("daily", "custom_days")]
+        for q in quests:
+            q["penalty_text"] = _penalty_text(q["points"])
+        rows.append((kid, quests))
+    return render_template("parent/today.html", rows=rows)
+
+
+@bp.post("/quests/<quest_id>/missed/<kid_id>")
+@parent_required
+def mark_missed(quest_id, kid_id):
+    db = get_db()
+    quest = get_quest(db, quest_id)
+    kid = get_user(db, kid_id)
+    if not quest or not kid or kid.get("role") != "kid":
+        flash("Couldn't find that quest or child.", "error")
+        return redirect(url_for("parent.today"))
+
+    claim, error = mark_quest_missed(db, quest, kid, local_now(), g.user)
+    if error:
+        flash(error, "warn")
+    else:
+        flash(f"'{quest['title']}' marked as not done for {kid['name']} "
+              f"— {claim['penalty']} points taken off.", "info")
+    return redirect(url_for("parent.today"))
+
+
+# ---------------------------------------------------------------------------
 # rewards
 # ---------------------------------------------------------------------------
 
@@ -266,7 +314,18 @@ def quests():
     return render_template("parent/quests.html",
                            quests=list_quests(db, active_only=False),
                            kids=list_kids(db),
-                           repeats=REPEAT_CHOICES)
+                           repeats=REPEAT_CHOICES,
+                           weekdays=WEEKDAY_LABELS)
+
+
+def _repeat_days(form):
+    """The weekday checkboxes (0 = Monday ... 6 = Sunday), sorted and unique."""
+    picked = set()
+    for value in form.getlist("repeat_days"):
+        day = as_int(value, default=-1, low=0, high=6)
+        if day >= 0:
+            picked.add(day)
+    return sorted(picked)
 
 
 @bp.post("/quests")
@@ -280,11 +339,16 @@ def create_quest():
 
     repeat = request.form.get("repeat", "daily")
     assigned = [oid(v) for v in request.form.getlist("assigned_to")]
+    days = _repeat_days(request.form)
+    if repeat == "custom_days" and not days:
+        flash("Pick at least one day for that quest.", "error")
+        return redirect(url_for("parent.quests"))
     db.quests.insert_one({
         "title": title,
         "emoji": (request.form.get("emoji", "").strip() or "⭐")[:4],
         "points": as_int(request.form.get("points"), default=5, low=1, high=1000),
         "repeat": repeat if repeat in REPEAT_CHOICES else "daily",
+        "repeat_days": days,
         "times_per_period": as_int(request.form.get("times_per_period"),
                                    default=1, low=1, high=20),
         "description": request.form.get("description", "").strip()[:240],
@@ -318,11 +382,16 @@ def update_quest(quest_id):
     else:
         repeat = request.form.get("repeat", quest.get("repeat", "daily"))
         assigned = [oid(v) for v in request.form.getlist("assigned_to")]
+        days = _repeat_days(request.form)
+        if repeat == "custom_days" and not days:
+            flash("Pick at least one day for that quest.", "error")
+            return redirect(url_for("parent.quests"))
         db.quests.update_one({"_id": quest["_id"]}, {"$set": {
             "title": request.form.get("title", quest["title"]).strip()[:80] or quest["title"],
             "emoji": (request.form.get("emoji", "").strip() or "⭐")[:4],
             "points": as_int(request.form.get("points"), default=quest["points"], low=1, high=1000),
             "repeat": repeat if repeat in REPEAT_CHOICES else "daily",
+            "repeat_days": days,
             "times_per_period": as_int(request.form.get("times_per_period"),
                                        default=quest.get("times_per_period", 1),
                                        low=1, high=20),

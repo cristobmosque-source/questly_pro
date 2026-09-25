@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block title %}Today &middot; {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="section__head section__head--page">
+  <h2>Today's quests</h2>
+  <span class="section__hint">{{ local_now().strftime("%A %-d %B") }}</span>
+</div>
+
+{% for kid, quests in rows %}
+  <section class="section">
+    <div class="section__head">
+      <h2>{{ kid.avatar }} {{ kid.name }}</h2>
+      <span class="section__hint">{{ kid.points }} &#11088;</span>
+    </div>
+    <div class="card feed">
+      {% for q in quests %}
+        <div class="feed__row">
+          <span class="feed__emoji">{{ q.emoji }}</span>
+          <div class="feed__text">
+            <p><strong>{{ q.title }}</strong>
+              {% if q.limit > 1 %} &middot; {{ q.used }} of {{ q.limit }} done{% endif %}
+            </p>
+            <span class="feed__when">+{{ q.points }} &#11088; &middot;
+              {% if q.repeat == 'custom_days' %}{{ q.repeat_days | length }} days a week{% else %}{{ q.repeat }}{% endif %}
+            </span>
+          </div>
+          {% if q.state == 'open' %}
+            <form method="post"
+                  action="{{ url_for('parent.mark_missed', quest_id=q._id, kid_id=kid._id) }}">
+              {{ csrf_field() }}
+              <button class="btn btn--danger btn--sm" type="submit"
+                      data-confirm="¿Marcar esta tarea como no realizada?&#10;&#10;Se descontarán {{ q.penalty_text }} puntos a {{ kid.name }}.">
+                Marcar como no realizada
+              </button>
+            </form>
+          {% elif q.state == 'pending' %}
+            <span class="stamp stamp--wait">Sent in</span>
+          {% elif q.state == 'missed' %}
+            <span class="stamp stamp--out">Not done</span>
+          {% else %}
+            <span class="stamp stamp--done">Done</span>
+          {% endif %}
+        </div>
+      {% else %}
+        <div class="empty"><p>No daily quests for today.</p></div>
+      {% endfor %}
+    </div>
+  </section>
+{% else %}
+  <div class="empty empty--big">
+    <div class="empty__emoji">&#128118;</div>
+    <p>No kids yet — add your first child first.</p>
+    <a class="btn btn--primary" href="{{ url_for('parent.family') }}">Family</a>
+  </div>
+{% endfor %}
+{% endblock %}

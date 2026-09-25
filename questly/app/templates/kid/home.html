@@ -63,7 +63,7 @@
           {% if q.description %}<p class="quest__desc">{{ q.description }}</p>{% endif %}
           <p class="quest__meta">
             <span class="chip chip--pts">+{{ q.points }} &#11088;</span>
-            <span class="chip">{{ q.repeat }}</span>
+            <span class="chip">{% if q.repeat == 'custom_days' %}{{ q.repeat_days | length }} days a week{% else %}{{ q.repeat }}{% endif %}</span>
             {% if q.limit > 1 %}
               <span class="chip chip--reps">{{ q.used }} of {{ q.limit }} done</span>
             {% endif %}
@@ -78,10 +78,12 @@
           </form>
         {% elif q.state == 'pending' %}
           <span class="stamp stamp--wait">Waiting&nbsp;&#9203;</span>
+        {% elif q.state == 'missed' %}
+          <span class="stamp stamp--out">Not done&nbsp;&#10060;</span>
         {% else %}
           <span class="stamp stamp--done">Done&nbsp;&#9989;</span>
         {% endif %}
-        {% if q.steps_total and q.state != 'done' %}
+        {% if q.steps_total and q.state in ('open', 'pending') %}
           <details class="steps" {{ 'open' if q.steps_left }}>
             <summary>Steps &middot; {{ q.steps_done }} of {{ q.steps_total }}</summary>
             <ul class="steplist">

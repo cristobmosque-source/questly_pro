@@ -65,3 +65,10 @@ def ensure_indexes(db):
          ("period", ASCENDING), ("seq", ASCENDING)],
         unique=True,
     )
+    # At most one "missed" marker per quest, child and period — the model
+    # checks first, and this index keeps a double tap honest.
+    db.quest_claims.create_index(
+        [("quest_id", ASCENDING), ("kid_id", ASCENDING), ("period", ASCENDING)],
+        unique=True,
+        partialFilterExpression={"status": "missed"},
+    )
