@@ -1,0 +1,33 @@
+{% if current_user and current_user.role == 'parent' %}
+<header class="topbar">
+  <div class="topbar__inner">
+    <a class="brand" href="{{ url_for('parent.dashboard') }}">
+      <img class="brand__mark" src="{{ url_for('static', filename='icons/icon.svg') }}" alt="" width="34" height="34">
+      <span class="brand__name">{{ app_name }}</span>
+    </a>
+
+    <nav class="topnav">
+      <a href="{{ url_for('parent.dashboard') }}" class="{{ 'is-active' if request.endpoint == 'parent.dashboard' }}">Home</a>
+      <a href="{{ url_for('parent.approvals') }}" class="{{ 'is-active' if request.endpoint == 'parent.approvals' }}">
+        Approvals
+        {% if approvals_waiting %}<span class="pip">{{ approvals_waiting }}</span>{% endif %}
+      </a>
+      <a href="{{ url_for('parent.rewards') }}" class="{{ 'is-active' if request.endpoint == 'parent.rewards' }}">Shop</a>
+      <a href="{{ url_for('parent.quests') }}" class="{{ 'is-active' if request.endpoint == 'parent.quests' }}">Quests</a>
+      <a href="{{ url_for('parent.family') }}" class="{{ 'is-active' if request.endpoint == 'parent.family' }}">Family</a>
+    </nav>
+
+    <a class="bell {{ 'has-new' if unread_news }}" href="{{ url_for('parent.news') }}"
+       title="Notifications" aria-label="Notifications">
+      <span class="bell__ico">&#128276;</span>
+      {% if unread_news %}<span class="pip">{{ unread_news }}</span>{% endif %}
+    </a>
+
+    <form method="post" action="{{ url_for('auth.logout') }}" class="topbar__out">
+      {{ csrf_field() }}
+      <a class="whoami" href="{{ url_for('parent.account') }}" title="Your account"><span class="whoami__face">{{ current_user.avatar or '🧑' }}</span><span class="whoami__name">{{ current_user.name }}</span></a>
+      <button class="btn btn--ghost btn--sm" type="submit">Log out</button>
+    </form>
+  </div>
+</header>
+{% endif %}

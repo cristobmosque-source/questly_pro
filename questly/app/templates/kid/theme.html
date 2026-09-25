@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block title %}Pick your look &middot; {{ app_name }}{% endblock %}
+{% block body_class %}kidview{% endblock %}
+{% block chrome %}{% include 'partials/kidhead.html' %}{% endblock %}
+{% block bottomnav %}{% include 'partials/kidnav.html' %}{% endblock %}
+
+{% block content %}
+<div class="section__head section__head--page">
+  <h2>Pick your look</h2>
+</div>
+
+<form method="post" action="{{ url_for('kid.choose_theme') }}">
+  {{ csrf_field() }}
+  <div class="themepick">
+    {% for t in themes %}
+      <label class="themecard {{ 'is-on' if t.key == current }}"
+             style="--t-accent:{{ t.accent }}; --t-a:{{ t.blobs[0] }}; --t-b:{{ t.blobs[1] }}; --t-c:{{ t.blobs[2] }}">
+        <input type="radio" name="theme" value="{{ t.key }}" {{ 'checked' if t.key == current }}>
+        <span class="themecard__swatch">
+          <span class="themecard__emoji">{{ t.emoji }}</span>
+        </span>
+        <span class="themecard__name">{{ t.label }}</span>
+        {% if t.key == current %}<span class="themecard__tick">&#10003;</span>{% endif %}
+      </label>
+    {% endfor %}
+  </div>
+  <button class="btn btn--primary btn--block" type="submit">Use this look</button>
+</form>
+{% endblock %}

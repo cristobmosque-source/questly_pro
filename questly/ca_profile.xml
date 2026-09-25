@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<CommunityApplications>
+  <Profile>
+Questly is a self-hosted family points-and-rewards app. Grown-ups award points
+for quests and good behaviour; kids spend them in a shop of rewards you stock
+yourself. No third-party accounts, no ads, no subscriptions.
+
+The container is stateless — everything lives in MongoDB, so there is no
+appdata share to back up and nothing to migrate but the database.
+
+**Support:** raise an issue on
+[GitHub](https://github.com/mahansford/questly/issues).
+  </Profile>
+  <Icon>https://raw.githubusercontent.com/mahansford/questly/main/app/static/icons/icon-512.png</Icon>
+  <WebPage>https://github.com/mahansford/questly</WebPage>
+</CommunityApplications>

@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+{% block title %}My stuff &middot; {{ app_name }}{% endblock %}
+{% block body_class %}kidview{% endblock %}
+{% block chrome %}{% include 'partials/kidhead.html' %}{% endblock %}
+{% block bottomnav %}{% include 'partials/kidnav.html' %}{% endblock %}
+
+{% block content %}
+<div class="stats">
+  <div class="stat">
+    <span class="stat__n">{{ kid.points }}</span>
+    <span class="stat__l">Points now</span>
+  </div>
+  <div class="stat">
+    <span class="stat__n">{{ kid.lifetime_points or 0 }}</span>
+    <span class="stat__l">Earned ever</span>
+  </div>
+  <div class="stat">
+    <span class="stat__n">{{ redemptions | selectattr('status', 'equalto', 'approved') | list | length }}</span>
+    <span class="stat__l">Rewards won</span>
+  </div>
+</div>
+
+<section class="section">
+  <div class="section__head"><h2>My rewards</h2></div>
+  <div class="card feed">
+    {% for r in redemptions %}
+      <div class="feed__row">
+        <span class="feed__emoji">{{ r.reward_emoji }}</span>
+        <div class="feed__text">
+          <p>{{ r.reward_title }}</p>
+          <span class="feed__when">{{ r.created_at | ago }} &middot; {{ r.cost }} &#11088;</span>
+        </div>
+        <span class="stamp stamp--{{ 'done' if r.status == 'approved' else ('wait' if r.status == 'pending' else 'out') }}">
+          {%- if r.status == 'approved' -%}Got it
+          {%- elif r.status == 'pending' -%}Waiting
+          {%- else -%}Refunded{%- endif -%}
+        </span>
+      </div>
+    {% else %}
+      <div class="empty"><p>No rewards yet. Have a look in the shop!</p></div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="section">
+  <div class="section__head"><h2>Points history</h2></div>
+  <div class="card feed">
+    {% for t in history %}
+      <div class="feed__row">
+        <span class="feed__delta {{ 'is-up' if t.delta > 0 else 'is-down' }}">{{ t.delta | signed }}</span>
+        <div class="feed__text">
+          <p>{{ t.reason }}</p>
+          <span class="feed__when">{{ t.created_at | datetime }}{% if t.actor_name %} &middot; {{ t.actor_name }}{% endif %}</span>
+        </div>
+        <span class="feed__bal">{{ t.balance_after }} &#11088;</span>
+      </div>
+    {% else %}
+      <div class="empty"><p>Nothing here yet.</p></div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+{% block title %}Who's here? &middot; {{ app_name }}{% endblock %}
+{% block body_class %}gate{% endblock %}
+{% block chrome %}{% endblock %}
+
+{% block content %}
+<div class="gate__wrap">
+  <div class="gate__logo">
+    <img class="brand__mark brand__mark--xl" src="{{ url_for('static', filename='icons/icon.svg') }}" alt="" width="92" height="92">
+    <h1 class="gate__title">{{ app_name }}</h1>
+    <p class="gate__sub">Earn points. Spend them on good stuff.</p>
+  </div>
+
+  <h2 class="gate__q">Who's here?</h2>
+
+  <div class="pickers">
+    {% for kid in kids %}
+      <a class="picker" href="{{ url_for('auth.kid_login', kid_id=kid._id) }}"
+         style="--kid:{{ kid.color }}">
+        <span class="picker__face">{{ kid.avatar }}</span>
+        <span class="picker__name">{{ kid.name }}</span>
+        <span class="picker__pts">{{ kid.points }} &#11088;</span>
+        {% if kid.pin_hash %}<span class="picker__lock" title="PIN protected">&#128274;</span>{% endif %}
+      </a>
+    {% else %}
+      <p class="gate__none">No kids added yet — log in as a grown-up to add them.</p>
+    {% endfor %}
+  </div>
+
+  <a class="gate__grown" href="{{ url_for('auth.parent_login') }}">
+    <span>&#129485;</span> I'm a grown-up
+  </a>
+</div>
+{% endblock %}

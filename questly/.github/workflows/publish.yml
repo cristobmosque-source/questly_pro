@@ -1,0 +1,112 @@
+name: Publish container image
+
+# Builds a multi-architecture image and publishes it. GHCR needs no setup —
+# it uses the workflow's built-in token. Docker Hub switches itself on as
+# soon as a DOCKERHUB_TOKEN secret exists, and is skipped silently until then.
+#
+# Unraid runs amd64; arm64 covers Apple Silicon and Raspberry Pi.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  DOCKERHUB_USER: hansford909
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Is Docker Hub configured?
+        id: dh
+        run: echo "enabled=${{ secrets.DOCKERHUB_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        if: steps.dh.outputs.enabled == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ env.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Work out names and tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ghcr.io/${{ github.repository }}
+            name=docker.io/${{ env.DOCKERHUB_USER }}/questly,enable=${{ steps.dh.outputs.enabled == 'true' }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' }}
+          labels: |
+            org.opencontainers.image.title=Questly
+            org.opencontainers.image.description=A family points-and-rewards app
+            org.opencontainers.image.licenses=AGPL-3.0-or-later
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # Without these, buildx adds provenance/SBOM attestations, which turn
+          # the manifest into an OCI image index carrying unknown/unknown
+          # entries. Tools that only accept the older Docker manifest-list
+          # media type then report the tag as missing — Unraid CA's scanner
+          # among them.
+          provenance: false
+          sbom: false
+
+      - name: Check the published image actually runs
+        run: |
+          IMAGE=ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}
+          docker run --rm -d --name questly-ci -p 8000:8000 \
+            -e SECRET_KEY=ci -e MONGO_URI=mongodb://127.0.0.1:27017/ "$IMAGE"
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/healthz || true)
+            # 503 is the healthy answer here: the app is up, there's just no Mongo
+            if [ "$code" = "200" ] || [ "$code" = "503" ]; then
+              echo "image serves HTTP (got $code)"
+              docker rm -f questly-ci >/dev/null
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "image never answered"; docker logs questly-ci; docker rm -f questly-ci; exit 1
+
+      - name: Summary
+        run: |
+          {
+            echo "### Published"
+            echo
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+            if [ "${{ steps.dh.outputs.enabled }}" != "true" ]; then
+              echo
+              echo "> Docker Hub was skipped — add a \`DOCKERHUB_TOKEN\` secret to enable it."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

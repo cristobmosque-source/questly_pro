@@ -1,0 +1,20 @@
+<header class="kidhead" style="--kid:{{ kid.color }}">
+  <div class="kidhead__row">
+    <div class="kidhead__who">
+      <span class="kidhead__face">{{ kid.avatar }}</span>
+      <div>
+        <p class="kidhead__hi">{{ greeting() }}</p>
+        <h1 class="kidhead__name">{{ kid.name }}</h1>
+      </div>
+    </div>
+    <a class="bell bell--kid {{ 'has-new' if unread_news }}" href="{{ url_for('kid.news') }}"
+       aria-label="What's new">
+      <span class="bell__ico">&#128276;</span>
+      {% if unread_news %}<span class="pip">{{ unread_news }}</span>{% endif %}
+    </a>
+    <div class="balance" title="Your points">
+      <span class="balance__star">&#11088;</span>
+      <span class="balance__n" data-count="{{ kid.points }}">{{ kid.points }}</span>
+    </div>
+  </div>
+</header>

@@ -1,0 +1,131 @@
+{# Notification channel manager. Expects: owner, channels (specs), events, summary #}
+<div class="chanlist">
+  {% for c in owner.channels or [] %}
+    {% set spec = channels.get(c.type) %}
+    <details class="chan {{ 'is-paused' if c.enabled is defined and not c.enabled }}">
+      <summary>
+        <span class="chan__ico">{{ spec.icon if spec else '&#128279;' | safe }}</span>
+        <div class="chan__text chan__summary">
+          <strong>{{ summary(c) }}</strong>
+          <span>
+            {{ 'Everything' if not c.events else (c.events | length) ~ ' kinds of update' }}
+            {% if c.enabled is defined and not c.enabled %} &middot; paused{% endif %}
+          </span>
+        </div>
+        <span class="rowcard__chev">&#9662;</span>
+      </summary>
+
+      {% if spec %}
+        <form method="post" class="chanedit"
+              action="{{ url_for('parent.edit_channel', owner_id=owner._id, channel_id=c.id) }}">
+          {{ csrf_field() }}
+          <div class="formgrid">
+            {% for name, label, kind, required, placeholder, hint in spec.fields %}
+              <label class="field field--grow">
+                <span>{{ label }}</span>
+                <input type="{{ kind }}" name="{{ c.type }}__{{ name }}"
+                       value="{{ '' if kind == 'password' else (c.config.get(name) or '') }}"
+                       placeholder="{{ 'leave blank to keep' if kind == 'password' else placeholder }}"
+                       autocomplete="off">
+                {% if hint %}<small class="hint">{{ hint }}</small>{% endif %}
+              </label>
+            {% endfor %}
+          </div>
+
+          <fieldset class="field field--full">
+            <span>Send which updates? <em>(none ticked = all of them)</em></span>
+            <div class="whochips">
+              {% for key, ev in events.items() %}
+                <label class="whochip">
+                  <input type="checkbox" name="events" value="{{ key }}"
+                         {{ 'checked' if key in (c.events or []) }}>
+                  <span>{{ ev.icon }} {{ ev.label }}</span>
+                </label>
+              {% endfor %}
+            </div>
+          </fieldset>
+
+          <label class="checkline">
+            <input type="checkbox" name="enabled" value="1"
+                   {{ 'checked' if c.enabled is not defined or c.enabled }}>
+            <span>Send to this channel</span>
+          </label>
+
+          <div class="rowcard__actions">
+            <button class="btn btn--primary btn--sm" type="submit">Save changes</button>
+          </div>
+        </form>
+      {% endif %}
+
+      <div class="chan__actions">
+        <form method="post" action="{{ url_for('parent.test_channel', owner_id=owner._id, channel_id=c.id) }}">
+          {{ csrf_field() }}
+          <button class="btn btn--ghost btn--sm" type="submit">Send a test</button>
+        </form>
+        <form method="post" action="{{ url_for('parent.delete_channel', owner_id=owner._id, channel_id=c.id) }}">
+          {{ csrf_field() }}
+          <button class="btn btn--danger btn--sm" type="submit"
+                  data-confirm="Remove this notification channel?">Remove</button>
+        </form>
+      </div>
+    </details>
+  {% else %}
+    <p class="card__note">No channels yet &mdash; {{ owner.name }} sees notifications
+    inside the app only.</p>
+  {% endfor %}
+</div>
+
+<details class="addchan">
+  <summary>Add a notification channel</summary>
+  <form method="post" action="{{ url_for('parent.add_channel_route', owner_id=owner._id) }}">
+    {{ csrf_field() }}
+
+    <div class="radiorow chanpick">
+      {% for key, spec in channels.items() %}
+        <label>
+          <input type="radio" name="type" value="{{ key }}" {{ 'checked' if loop.first }}>
+          <span>{{ spec.icon }} {{ spec.label }}</span>
+        </label>
+      {% endfor %}
+    </div>
+
+    {% for key, spec in channels.items() %}
+      <div class="chanfields" data-when="{{ key }}">
+        <p class="card__note">{{ spec.blurb }}</p>
+        <div class="formgrid">
+          {% for name, label, kind, required, placeholder, hint in spec.fields %}
+            <label class="field field--grow">
+              <span>{{ label }}{% if not required %} <em>(optional)</em>{% endif %}</span>
+              <input type="{{ kind }}" name="{{ key }}__{{ name }}"
+                     placeholder="{{ placeholder }}" autocomplete="off">
+              {% if hint %}<small class="hint">{{ hint }}</small>{% endif %}
+            </label>
+          {% endfor %}
+        </div>
+        {% if key == 'signal' %}
+          <div class="grouppick" data-groups-url="{{ url_for('parent.lookup_signal_groups') }}">
+            <button type="button" class="btn btn--ghost btn--sm" data-find-groups>
+              Find my groups
+            </button>
+            <span class="hint" data-groups-status></span>
+            <div class="grouppick__list" data-groups-list hidden></div>
+          </div>
+        {% endif %}
+      </div>
+    {% endfor %}
+
+    <fieldset class="field field--full">
+      <span>Send which updates? <em>(none ticked = all of them)</em></span>
+      <div class="whochips">
+        {% for key, ev in events.items() %}
+          <label class="whochip">
+            <input type="checkbox" name="events" value="{{ key }}">
+            <span>{{ ev.icon }} {{ ev.label }}</span>
+          </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <button class="btn btn--primary btn--sm" type="submit">Connect and send a test</button>
+  </form>
+</details>

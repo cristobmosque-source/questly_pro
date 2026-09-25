@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% block title %}Shop &middot; {{ app_name }}{% endblock %}
+{% block body_class %}kidview{% endblock %}
+{% block chrome %}{% include 'partials/kidhead.html' %}{% endblock %}
+{% block bottomnav %}{% include 'partials/kidnav.html' %}{% endblock %}
+
+{% block content %}
+{% if pending %}
+  <section class="card notice">
+    <span class="notice__ico">&#9203;</span>
+    <div>
+      <strong>Waiting for a grown-up</strong>
+      <p>{% for p in pending %}{{ p.reward_emoji }} {{ p.reward_title }}{{ ', ' if not loop.last }}{% endfor %}</p>
+    </div>
+  </section>
+{% endif %}
+
+<div class="section__head section__head--page">
+  <h2>The Shop</h2>
+  <span class="section__hint">You have {{ kid.points }} &#11088;</span>
+</div>
+
+<div class="grid-rewards">
+  {% for r in rewards %}
+    {% set afford = kid.points >= r.cost %}
+    {% set is_goal = goal_id and r._id == goal_id %}
+    <article class="reward {{ 'is-locked' if not afford or r.sold_out }} {{ 'is-goal' if is_goal }}">
+      {% if is_goal %}<span class="reward__flag">Saving for this</span>{% endif %}
+      <div class="reward__emoji">{{ r.emoji }}</div>
+      <h3 class="reward__title">{{ r.title }}</h3>
+      {% if r.description %}<p class="reward__desc">{{ r.description }}</p>{% endif %}
+      {% if r.stock_text %}<p class="reward__stock">{{ r.stock_text }}</p>{% endif %}
+      <div class="reward__foot">
+        <span class="price">{{ r.cost }} &#11088;</span>
+        {% if r.sold_out %}
+          <span class="stamp stamp--out">All gone</span>
+        {% elif afford %}
+          <form method="post" action="{{ url_for('kid.buy', reward_id=r._id) }}">
+            {{ csrf_field() }}
+            <button class="btn btn--buy" type="submit"
+                    data-confirm="Spend {{ r.cost }} points on {{ r.title }}?">Buy</button>
+          </form>
+        {% else %}
+          <span class="stamp stamp--lock">{{ r.cost - kid.points }} more</span>
+        {% endif %}
+      </div>
+      {% if not afford and not r.sold_out %}
+        <form method="post" class="reward__goal"
+              action="{{ url_for('kid.set_goal', reward_id='clear' if is_goal else r._id) }}">
+          {{ csrf_field() }}
+          <input type="hidden" name="next" value="{{ url_for('kid.shop') }}">
+          <button class="linkbtn" type="submit">
+            {{ 'Stop saving for this' if is_goal else 'Save up for this' }}
+          </button>
+        </form>
+      {% endif %}
+    </article>
+  {% else %}
+    <div class="empty empty--big">
+      <div class="empty__emoji">&#128230;</div>
+      <p>The shop is empty. Ask a grown-up to add some rewards!</p>
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+{% block title %}Hi {{ kid.name }}! &middot; {{ app_name }}{% endblock %}
+{% block body_class %}gate{% endblock %}
+{% block chrome %}{% endblock %}
+
+{% block content %}
+<div class="gate__wrap gate__wrap--narrow" style="--kid:{{ kid.color }}">
+  <div class="gate__logo">
+    <span class="picker__face picker__face--xl">{{ kid.avatar }}</span>
+    <h1 class="gate__title">Hi {{ kid.name }}!</h1>
+    <p class="gate__sub">Tap your secret PIN</p>
+  </div>
+
+  <form class="pinpad" method="post" id="pinform">
+    {{ csrf_field() }}
+    <input type="hidden" name="pin" id="pin-value">
+    <div class="pinpad__dots" id="pin-dots">
+      <span></span><span></span><span></span><span></span><span></span><span></span>
+    </div>
+    <div class="pinpad__keys">
+      {% for n in ['1','2','3','4','5','6','7','8','9'] %}
+        <button type="button" class="key" data-key="{{ n }}">{{ n }}</button>
+      {% endfor %}
+      <button type="button" class="key key--soft" data-key="clear">Clear</button>
+      <button type="button" class="key" data-key="0">0</button>
+      <button type="submit" class="key key--go" id="pin-go">Go</button>
+    </div>
+  </form>
+
+  <a class="gate__back" href="{{ url_for('public.who') }}">&larr; Not you?</a>
+</div>
+{% endblock %}

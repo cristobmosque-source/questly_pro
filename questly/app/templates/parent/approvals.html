@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+{% block title %}Approvals &middot; {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="section__head section__head--page">
+  <h2>Approvals</h2>
+  <span class="section__hint">{{ (redemptions | length) + (claims | length) }} waiting</span>
+</div>
+
+<section class="section">
+  <div class="section__head"><h2>Rewards to hand over</h2></div>
+  <div class="card feed">
+    {% for r in redemptions %}
+      <div class="feed__row">
+        <span class="feed__emoji">{{ r.reward_emoji }}</span>
+        <div class="feed__text">
+          <p><strong>{{ r.kid_name }}</strong> bought {{ r.reward_title }}</p>
+          <span class="feed__when">{{ r.created_at | datetime }} &middot; {{ r.cost }} &#11088; already deducted</span>
+        </div>
+        {% include 'parent/_decide_redemption.html' %}
+      </div>
+    {% else %}
+      <div class="empty"><p>Nothing to hand over. &#127881;</p></div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="section">
+  <div class="section__head"><h2>Quests to check</h2></div>
+  <div class="card feed">
+    {% for c in claims %}
+      <div class="feed__row">
+        <span class="feed__emoji">{{ c.quest_emoji }}</span>
+        <div class="feed__text">
+          <p><strong>{{ c.kid_name }}</strong> says they finished {{ c.quest_title }}</p>
+          <span class="feed__when">{{ c.created_at | datetime }} &middot; worth +{{ c.points }} &#11088;</span>
+        </div>
+        {% include 'parent/_decide_claim.html' %}
+      </div>
+    {% else %}
+      <div class="empty"><p>All caught up. &#128077;</p></div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

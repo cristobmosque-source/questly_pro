@@ -1,0 +1,132 @@
+{% extends 'base.html' %}
+{% block title %}{{ kid.name }}'s home &middot; {{ app_name }}{% endblock %}
+{% block body_class %}kidview{% endblock %}
+{% block chrome %}{% include 'partials/kidhead.html' %}{% endblock %}
+{% block bottomnav %}{% include 'partials/kidnav.html' %}{% endblock %}
+
+{% block content %}
+
+{% if goal %}
+  {% set pct = (kid.points / goal.cost * 100) | round(0, 'floor') if goal.cost else 100 %}
+  <section class="card goal {{ 'goal--ready' if goal_reached }}">
+    <div class="goal__top">
+      <span class="goal__emoji">{{ goal.emoji }}</span>
+      <div class="goal__text">
+        <p class="goal__label">{{ 'Saving for' if goal_chosen else 'Next reward' }}</p>
+        <h2 class="goal__title">{{ goal.title }}</h2>
+      </div>
+      {% if goal_reached %}
+        <a class="btn btn--buy btn--sm" href="{{ url_for('kid.shop') }}">Go get it!</a>
+      {% else %}
+        <span class="goal__togo">{{ goal.cost - kid.points }} to go</span>
+      {% endif %}
+    </div>
+    <div class="bar"><div class="bar__fill" style="width: {{ [pct, 100] | min }}%"></div></div>
+    <div class="goal__foot">
+      <span>{{ kid.points }} of {{ goal.cost }} &#11088;</span>
+      {% if goal_chosen %}
+        <form method="post" action="{{ url_for('kid.set_goal', reward_id='clear') }}">
+          {{ csrf_field() }}
+          <input type="hidden" name="next" value="{{ url_for('kid.home') }}">
+          <button class="linkbtn" type="submit">Stop saving for this</button>
+        </form>
+      {% else %}
+        <a class="linkbtn" href="{{ url_for('kid.shop') }}">Pick something to save for</a>
+      {% endif %}
+    </div>
+  </section>
+{% elif affordable %}
+  <section class="card goal goal--ready">
+    <div class="goal__top">
+      <span class="goal__emoji">&#127881;</span>
+      <div class="goal__text">
+        <p class="goal__label">You're rich!</p>
+        <h2 class="goal__title">You can afford {{ affordable | length }} reward{{ '' if affordable|length == 1 else 's' }}</h2>
+      </div>
+      <a class="btn btn--primary btn--sm" href="{{ url_for('kid.shop') }}">Go shopping</a>
+    </div>
+  </section>
+{% endif %}
+
+<section class="section">
+  <div class="section__head">
+    <h2>Today's quests</h2>
+    <span class="section__hint">{{ open_quests | length }} left</span>
+  </div>
+
+  <div class="quests">
+    {% for q in quests %}
+      <article class="quest quest--{{ q.state }}" id="quest-{{ q._id }}">
+        <span class="quest__emoji">{{ q.emoji }}</span>
+        <div class="quest__body">
+          <h3>{{ q.title }}</h3>
+          {% if q.description %}<p class="quest__desc">{{ q.description }}</p>{% endif %}
+          <p class="quest__meta">
+            <span class="chip chip--pts">+{{ q.points }} &#11088;</span>
+            <span class="chip">{{ q.repeat }}</span>
+            {% if q.limit > 1 %}
+              <span class="chip chip--reps">{{ q.used }} of {{ q.limit }} done</span>
+            {% endif %}
+          </p>
+        </div>
+        {% if q.state == 'open' and q.steps_left %}
+          <span class="stamp stamp--steps">{{ q.steps_left }} step{{ '' if q.steps_left == 1 else 's' }} left</span>
+        {% elif q.state == 'open' %}
+          <form method="post" action="{{ url_for('kid.finish_quest', quest_id=q._id) }}">
+            {{ csrf_field() }}
+            <button class="btn btn--go" type="submit">Done!</button>
+          </form>
+        {% elif q.state == 'pending' %}
+          <span class="stamp stamp--wait">Waiting&nbsp;&#9203;</span>
+        {% else %}
+          <span class="stamp stamp--done">Done&nbsp;&#9989;</span>
+        {% endif %}
+        {% if q.steps_total and q.state != 'done' %}
+          <details class="steps" {{ 'open' if q.steps_left }}>
+            <summary>Steps &middot; {{ q.steps_done }} of {{ q.steps_total }}</summary>
+            <ul class="steplist">
+              {% for t in q.subtasks %}
+                <li>
+                  <form method="post"
+                        action="{{ url_for('kid.tick_step', quest_id=q._id, subtask_id=t.id) }}">
+                    {{ csrf_field() }}
+                    <button type="submit" class="step {{ 'is-done' if t.id in q.ticked }}">
+                      <span class="step__box">{{ '&#10003;' | safe if t.id in q.ticked }}</span>
+                      <span class="step__text">{{ t.text }}</span>
+                    </button>
+                  </form>
+                </li>
+              {% endfor %}
+            </ul>
+          </details>
+        {% endif %}
+      </article>
+    {% else %}
+      <div class="empty">
+        <div class="empty__emoji">&#127807;</div>
+        <p>No quests right now. Enjoy the break!</p>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="section">
+  <div class="section__head">
+    <h2>Recent points</h2>
+    <a class="section__link" href="{{ url_for('kid.stuff') }}">See all</a>
+  </div>
+  <div class="card feed">
+    {% for t in history %}
+      <div class="feed__row">
+        <span class="feed__delta {{ 'is-up' if t.delta > 0 else 'is-down' }}">{{ t.delta | signed }}</span>
+        <div class="feed__text">
+          <p>{{ t.reason }}</p>
+          <span class="feed__when">{{ t.created_at | ago }}{% if t.actor_name %} &middot; {{ t.actor_name }}{% endif %}</span>
+        </div>
+      </div>
+    {% else %}
+      <div class="empty"><p>Nothing yet — go earn some points!</p></div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

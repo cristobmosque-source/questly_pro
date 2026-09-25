@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block title %}Set up &middot; {{ app_name }}{% endblock %}
+{% block body_class %}gate{% endblock %}
+{% block chrome %}{% endblock %}
+
+{% block content %}
+<div class="gate__wrap gate__wrap--narrow">
+  <div class="gate__logo">
+    <img class="brand__mark brand__mark--xl" src="{{ url_for('static', filename='icons/icon.svg') }}" alt="" width="92" height="92">
+    <h1 class="gate__title">Welcome to {{ app_name }}</h1>
+    <p class="gate__sub">Create the first grown-up account.</p>
+  </div>
+
+  <form class="card card--form" method="post">
+    {{ csrf_field() }}
+    <label class="field">
+      <span>Your name</span>
+      <input name="name" required autocomplete="name" placeholder="Mum, Dad, Sam...">
+    </label>
+    <label class="field">
+      <span>Email</span>
+      <input name="email" type="email" required autocomplete="username">
+    </label>
+    <label class="field">
+      <span>Password</span>
+      <input name="password" type="password" required minlength="8" autocomplete="new-password">
+    </label>
+    <label class="field">
+      <span>Confirm password</span>
+      <input name="confirm" type="password" required minlength="8" autocomplete="new-password">
+    </label>
+    <button class="btn btn--primary btn--block" type="submit">Create account</button>
+  </form>
+</div>
+{% endblock %}

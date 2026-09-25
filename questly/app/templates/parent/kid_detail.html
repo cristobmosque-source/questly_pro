@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% block title %}{{ kid.name }} &middot; {{ app_name }}{% endblock %}
+
+{% block content %}
+<a class="backlink" href="{{ url_for('parent.dashboard') }}">&larr; All kids</a>
+
+<section class="card hero" style="--kid:{{ kid.color }}">
+  <span class="hero__face">{{ kid.avatar }}</span>
+  <div class="hero__text">
+    <h1>{{ kid.name }}</h1>
+    <p>{{ kid.points }} points now &middot; {{ kid.lifetime_points or 0 }} earned all time</p>
+  </div>
+</section>
+
+<section class="card card--form">
+  <h2 class="card__title">Give or take points</h2>
+  <form class="award" method="post" action="{{ url_for('parent.award') }}">
+    {{ csrf_field() }}
+    <input type="hidden" name="kid_id" value="{{ kid._id }}">
+    <input type="hidden" name="next" value="{{ url_for('parent.kid_detail', kid_id=kid._id) }}">
+    <input class="award__reason" name="reason" maxlength="120" placeholder="What's it for?">
+    <div class="award__row">
+      {% for n in quick %}
+        <button class="btn btn--pill" type="submit" name="amount" value="{{ n }}">+{{ n }}</button>
+      {% endfor %}
+    </div>
+    <div class="award__custom">
+      <input type="number" name="amount" min="1" max="1000" placeholder="0" inputmode="numeric">
+      <button class="btn btn--sm btn--primary" type="submit">Give</button>
+      <button class="btn btn--sm btn--danger" type="submit" name="negate" value="1">Take away</button>
+    </div>
+  </form>
+</section>
+
+<section class="section">
+  <div class="section__head"><h2>Rewards bought</h2></div>
+  <div class="card feed">
+    {% for r in redemptions %}
+      <div class="feed__row">
+        <span class="feed__emoji">{{ r.reward_emoji }}</span>
+        <div class="feed__text">
+          <p>{{ r.reward_title }}</p>
+          <span class="feed__when">{{ r.created_at | datetime }} &middot; {{ r.cost }} &#11088;</span>
+        </div>
+        {% if r.status == 'pending' %}
+          {% include 'parent/_decide_redemption.html' %}
+        {% else %}
+          <span class="stamp stamp--{{ 'done' if r.status == 'approved' else 'out' }}">
+            {{ 'Given' if r.status == 'approved' else 'Refunded' }}
+          </span>
+        {% endif %}
+      </div>
+    {% else %}
+      <div class="empty"><p>Nothing bought yet.</p></div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="section">
+  <div class="section__head"><h2>Full history</h2></div>
+  <div class="card feed">
+    {% for t in history %}
+      <div class="feed__row">
+        <span class="feed__delta {{ 'is-up' if t.delta > 0 else 'is-down' }}">{{ t.delta | signed }}</span>
+        <div class="feed__text">
+          <p>{{ t.reason }}</p>
+          <span class="feed__when">{{ t.created_at | datetime }} &middot; by {{ t.actor_name }}</span>
+        </div>
+        <span class="feed__bal">{{ t.balance_after }} &#11088;</span>
+      </div>
+    {% else %}
+      <div class="empty"><p>No history yet.</p></div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

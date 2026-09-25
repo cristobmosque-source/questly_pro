@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+{% block title %}My account &middot; {{ app_name }}{% endblock %}
+
+{% block content %}
+<a class="backlink" href="{{ url_for('parent.family') }}">&larr; Family</a>
+
+<section class="card hero">
+  <span class="hero__face">{{ me.avatar }}</span>
+  <div class="hero__text">
+    <h1>{{ me.name }}</h1>
+    <p>{{ me.email }}</p>
+  </div>
+</section>
+
+<section class="card card--form">
+  <h2 class="card__title">Your details</h2>
+  <form method="post" action="{{ url_for('parent.update_profile') }}" class="formgrid">
+    {{ csrf_field() }}
+    <label class="field field--grow">
+      <span>Name</span>
+      <input name="name" value="{{ me.name }}" maxlength="40" required>
+    </label>
+    <label class="field field--grow">
+      <span>Email <em>(you log in with this)</em></span>
+      <input name="email" type="email" value="{{ me.email }}" required autocomplete="username">
+    </label>
+
+    <fieldset class="field field--full">
+      <span>Your icon</span>
+      <div class="avatarpick">
+        {% for a in avatars %}
+          <label>
+            <input type="radio" name="avatar" value="{{ a }}" {{ 'checked' if me.avatar == a }}>
+            <span>{{ a }}</span>
+          </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <button class="btn btn--primary" type="submit">Save details</button>
+  </form>
+</section>
+
+<section class="card card--form">
+  <h2 class="card__title">Where your notifications go</h2>
+  <p class="card__note">You always see them in the app. Add a channel to get
+  them on your phone as well.</p>
+  {% set owner = me %}
+  {% include 'partials/channels.html' %}
+</section>
+
+<section class="card card--form">
+  <h2 class="card__title">Change your password</h2>
+  <form method="post" action="{{ url_for('parent.change_password') }}" class="formgrid">
+    {{ csrf_field() }}
+    <label class="field field--grow">
+      <span>Current password</span>
+      <input name="current_password" type="password" required autocomplete="current-password">
+    </label>
+    <label class="field field--grow">
+      <span>New password</span>
+      <input name="new_password" type="password" required minlength="8" autocomplete="new-password">
+    </label>
+    <label class="field field--grow">
+      <span>Confirm new password</span>
+      <input name="confirm_password" type="password" required minlength="8" autocomplete="new-password">
+    </label>
+    <button class="btn btn--primary" type="submit">Change password</button>
+  </form>
+</section>
+{% endblock %}

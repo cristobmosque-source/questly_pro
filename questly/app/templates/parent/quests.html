@@ -1,0 +1,147 @@
+{% extends 'base.html' %}
+{% block title %}Quests &middot; {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="section__head section__head--page">
+  <h2>Quest board</h2>
+  <span class="section__hint">{{ quests | selectattr('active') | list | length }} active</span>
+</div>
+
+<section class="card card--form">
+  <h2 class="card__title">Add a quest</h2>
+  <p class="card__note">Kids tap "Done!" and you approve it — points land after that.
+    Set <strong>Times each</strong> above 1 for something worth doing more than once,
+    like a tidy-up round.</p>
+  <form method="post" action="{{ url_for('parent.create_quest') }}" class="formgrid">
+    {{ csrf_field() }}
+    <label class="field field--emoji">
+      <span>Icon</span>
+      <input name="emoji" maxlength="4" value="&#11088;" class="emoji-input">
+    </label>
+    <label class="field field--grow">
+      <span>Quest</span>
+      <input name="title" required maxlength="80" placeholder="Tidy your room">
+    </label>
+    <label class="field field--num">
+      <span>Points</span>
+      <input name="points" type="number" min="1" max="1000" value="5" inputmode="numeric" required>
+    </label>
+    <label class="field field--num">
+      <span>Repeats</span>
+      <select name="repeat">
+        {% for r in repeats %}<option value="{{ r }}">{{ r | capitalize }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="field field--num">
+      <span>Times each</span>
+      <input name="times_per_period" type="number" min="1" max="20" value="1" inputmode="numeric">
+    </label>
+    <label class="field field--full">
+      <span>Description <em>(optional)</em></span>
+      <input name="description" maxlength="240"
+             placeholder="Everything off the floor, bed made, curtains open">
+    </label>
+    <label class="field field--full">
+      <span>Steps <em>(optional, one per line &mdash; all must be ticked before it can be finished)</em></span>
+      <textarea name="subtasks" rows="3"
+                placeholder="Toys away&#10;Clothes in the basket&#10;Make the bed"></textarea>
+    </label>
+    <fieldset class="field field--full">
+      <span>Who's it for? <em>(nobody ticked = everyone)</em></span>
+      <div class="whochips">
+        {% for k in kids %}
+          <label class="whochip" style="--kid:{{ k.color }}">
+            <input type="checkbox" name="assigned_to" value="{{ k._id }}">
+            <span>{{ k.avatar }} {{ k.name }}</span>
+          </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    <button class="btn btn--primary" type="submit">Add quest</button>
+  </form>
+</section>
+
+<div class="stacklist">
+  {% for q in quests %}
+    <details class="rowcard {{ 'is-off' if not q.active }}">
+      <summary>
+        <span class="rowcard__emoji">{{ q.emoji }}</span>
+        <span class="rowcard__title">
+          {{ q.title }}
+          <em class="tag">{{ (q.times_per_period or 1) ~ "× " if (q.times_per_period or 1) > 1 }}{{ q.repeat }}</em>
+          {% if not q.active %}<em class="tag">paused</em>{% endif %}
+          {% if q.subtasks %}<em class="tag">{{ q.subtasks | length }} steps</em>{% endif %}
+          {% if q.assigned_to %}
+            <em class="tag">{{ q.assigned_to | length }} kid{{ '' if q.assigned_to|length == 1 else 's' }}</em>
+          {% endif %}
+        </span>
+        <span class="price">+{{ q.points }} &#11088;</span>
+        <span class="rowcard__chev">&#9662;</span>
+      </summary>
+
+      <form method="post" action="{{ url_for('parent.update_quest', quest_id=q._id) }}" class="formgrid">
+        {{ csrf_field() }}
+        <label class="field field--emoji">
+          <span>Icon</span>
+          <input name="emoji" maxlength="4" value="{{ q.emoji }}" class="emoji-input">
+        </label>
+        <label class="field field--grow">
+          <span>Quest</span>
+          <input name="title" value="{{ q.title }}" maxlength="80" required>
+        </label>
+        <label class="field field--num">
+          <span>Points</span>
+          <input name="points" type="number" min="1" max="1000" value="{{ q.points }}" required>
+        </label>
+        <label class="field field--num">
+          <span>Repeats</span>
+          <select name="repeat">
+            {% for r in repeats %}
+              <option value="{{ r }}" {{ 'selected' if q.repeat == r }}>{{ r | capitalize }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="field field--num">
+          <span>Times each</span>
+          <input name="times_per_period" type="number" min="1" max="20"
+                 value="{{ q.times_per_period or 1 }}" inputmode="numeric">
+        </label>
+        <label class="field field--full">
+          <span>Description</span>
+          <input name="description" value="{{ q.description or '' }}" maxlength="240">
+        </label>
+        <label class="field field--full">
+          <span>Steps <em>(one per line)</em></span>
+          <textarea name="subtasks" rows="3">{% for t in q.subtasks or [] %}{{ t.text }}
+{% endfor %}</textarea>
+        </label>
+        <fieldset class="field field--full">
+          <span>Who's it for?</span>
+          <div class="whochips">
+            {% for k in kids %}
+              <label class="whochip" style="--kid:{{ k.color }}">
+                <input type="checkbox" name="assigned_to" value="{{ k._id }}"
+                       {{ 'checked' if k._id in (q.assigned_to or []) }}>
+                <span>{{ k.avatar }} {{ k.name }}</span>
+              </label>
+            {% endfor %}
+          </div>
+        </fieldset>
+        <div class="rowcard__actions">
+          <button class="btn btn--primary btn--sm" type="submit" name="action" value="save">Save</button>
+          <button class="btn btn--ghost btn--sm" type="submit" name="action" value="toggle">
+            {{ 'Resume' if not q.active else 'Pause' }}
+          </button>
+          <button class="btn btn--danger btn--sm" type="submit" name="action" value="delete"
+                  data-confirm="Delete the quest '{{ q.title }}'?">Delete</button>
+        </div>
+      </form>
+    </details>
+  {% else %}
+    <div class="empty empty--big">
+      <div class="empty__emoji">&#128220;</div>
+      <p>No quests yet. Add one above to get things moving.</p>
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}

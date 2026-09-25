@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+{% block title %}Award points &middot; {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="section__head section__head--page">
+  <h2>Award points</h2>
+  {% if approvals_waiting %}
+    <a class="btn btn--warn btn--sm" href="{{ url_for('parent.approvals') }}">
+      {{ approvals_waiting }} waiting for you
+    </a>
+  {% endif %}
+</div>
+
+<div class="grid-kids">
+  {% for kid in kids %}
+    <article class="kidcard" style="--kid:{{ kid.color }}">
+      <a class="kidcard__head" href="{{ url_for('parent.kid_detail', kid_id=kid._id) }}">
+        <span class="kidcard__face">{{ kid.avatar }}</span>
+        <div>
+          <h3>{{ kid.name }}</h3>
+          <span class="kidcard__pts">{{ kid.points }} &#11088;</span>
+        </div>
+        <span class="kidcard__go">&rsaquo;</span>
+      </a>
+
+      <form class="award" method="post" action="{{ url_for('parent.award') }}">
+        {{ csrf_field() }}
+        <input type="hidden" name="kid_id" value="{{ kid._id }}">
+        <input type="hidden" name="next" value="{{ url_for('parent.dashboard') }}">
+        <input class="award__reason" name="reason" maxlength="120"
+               placeholder="What for? (optional)">
+        <div class="award__row">
+          {% for n in quick %}
+            <button class="btn btn--pill" type="submit" name="amount" value="{{ n }}">+{{ n }}</button>
+          {% endfor %}
+        </div>
+        <details class="award__more">
+          <summary>Other amount</summary>
+          <div class="award__custom">
+            <input type="number" name="amount" min="1" max="1000" placeholder="0" inputmode="numeric">
+            <button class="btn btn--sm btn--primary" type="submit">Give</button>
+            <button class="btn btn--sm btn--danger" type="submit" name="negate" value="1">Take away</button>
+          </div>
+        </details>
+      </form>
+    </article>
+  {% else %}
+    <div class="empty empty--big">
+      <div class="empty__emoji">&#128118;</div>
+      <p>No kids yet.</p>
+      <a class="btn btn--primary" href="{{ url_for('parent.family') }}">Add your first child</a>
+    </div>
+  {% endfor %}
+</div>
+
+{% if redemptions or claims %}
+<section class="section">
+  <div class="section__head">
+    <h2>Waiting for approval</h2>
+    <a class="section__link" href="{{ url_for('parent.approvals') }}">Open approvals</a>
+  </div>
+  <div class="card feed">
+    {% for r in redemptions[:4] %}
+      <div class="feed__row">
+        <span class="feed__emoji">{{ r.reward_emoji }}</span>
+        <div class="feed__text">
+          <p><strong>{{ r.kid_name }}</strong> bought {{ r.reward_title }}</p>
+          <span class="feed__when">{{ r.created_at | ago }} &middot; {{ r.cost }} &#11088;</span>
+        </div>
+        {% include 'parent/_decide_redemption.html' %}
+      </div>
+    {% endfor %}
+    {% for c in claims[:4] %}
+      <div class="feed__row">
+        <span class="feed__emoji">{{ c.quest_emoji }}</span>
+        <div class="feed__text">
+          <p><strong>{{ c.kid_name }}</strong> finished {{ c.quest_title }}</p>
+          <span class="feed__when">{{ c.created_at | ago }} &middot; +{{ c.points }} &#11088;</span>
+        </div>
+        {% include 'parent/_decide_claim.html' %}
+      </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<section class="section">
+  <div class="section__head"><h2>Recent activity</h2></div>
+  <div class="card feed">
+    {% for t in activity %}
+      <div class="feed__row">
+        <span class="feed__delta {{ 'is-up' if t.delta > 0 else 'is-down' }}">{{ t.delta | signed }}</span>
+        <div class="feed__text">
+          <p><strong>{{ t.kid_name }}</strong> &middot; {{ t.reason }}</p>
+          <span class="feed__when">{{ t.created_at | ago }} &middot; by {{ t.actor_name }}</span>
+        </div>
+      </div>
+    {% else %}
+      <div class="empty"><p>Nothing has happened yet.</p></div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

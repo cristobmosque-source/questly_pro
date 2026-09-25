@@ -1,0 +1,79 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>questly</Name>
+  <Repository>hansford909/questly:latest</Repository>
+  <Registry>https://hub.docker.com/r/hansford909/questly</Registry>
+  <Network>bridge</Network>
+  <Privileged>false</Privileged>
+  <Shell>sh</Shell>
+
+  <Icon>https://raw.githubusercontent.com/mahansford/questly/main/app/static/icons/icon-512.png</Icon>
+  <WebUI>http://[IP]:[PORT:8000]</WebUI>
+
+  <Overview>
+A family points-and-rewards app. Grown-ups award points for quests and good behaviour; kids spend them in a shop of rewards you stock yourself.
+
+Kids sign in by tapping their face and typing a 4-6 digit PIN, or no PIN at all for the youngest. They get a quest list with big Done buttons, a progress bar counting down to the next reward they cannot quite afford, and a shop showing what they can buy now. Grown-ups get quick award buttons, a quest board, a shop editor, and one approvals page for everything waiting on them. Every point movement is written to a ledger with a running balance.
+
+The interface is mobile-first and installs to a phone or tablet home screen.
+
+IMPORTANT - this container needs a MongoDB 5 or newer server, which is not included. Install one from Community Apps first, then point MONGO_URI at it. Questly keeps no local state, so there is no appdata path to configure and nothing to back up except the database.
+
+If your MongoDB container is on Unraid's default bridge network, container names will not resolve - use the server's LAN IP with MongoDB's port published, for example mongodb://192.168.1.50:27017/. Container names only work if both containers share a user-defined custom network.
+  </Overview>
+
+  <Project>https://github.com/mahansford/questly</Project>
+  <Support>https://github.com/mahansford/questly/issues</Support>
+  <TemplateURL>https://raw.githubusercontent.com/mahansford/questly/main/templates/questly.xml</TemplateURL>
+  <ReadMe>https://raw.githubusercontent.com/mahansford/questly/main/README.md</ReadMe>
+
+  <Category>Productivity: Tools:Utilities</Category>
+  <ExtraSearchTerms>chores kids family rewards points allowance pocket money quests</ExtraSearchTerms>
+  <Requires>A MongoDB 5+ server. Questly stores everything there and keeps no local state.</Requires>
+
+  <License>AGPL-3.0-or-later</License>
+  <Changes>
+### 1.3.0
+Signal group chats, formatted Signal messages, and far more detail in every notification.
+
+### 1.2.0
+In-app notifications, plus per-person delivery via ntfy, Signal, Gotify, Telegram, Discord, Pushover or a webhook.
+
+### 1.1.0
+Saving up for a chosen reward, eight child-picked themes, refilling shop stock, and stay-signed-in for grown-ups.
+
+### 1.0.2
+Registry compatibility fix for the published image.
+
+### 1.0.0
+First release.
+  </Changes>
+  <Date>2026-08-21</Date>
+  <MinVer>6.9</MinVer>
+
+  <Screenshot>https://raw.githubusercontent.com/mahansford/questly/main/docs/screenshots/03-kid-home.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/mahansford/questly/main/docs/screenshots/04-shop.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/mahansford/questly/main/docs/screenshots/05-themes.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/mahansford/questly/main/docs/screenshots/06-award-points.png</Screenshot>
+  <Screenshot>https://raw.githubusercontent.com/mahansford/questly/main/docs/screenshots/07-approvals.png</Screenshot>
+
+  <Config Name="WebUI Port" Target="8000" Default="37000" Mode="tcp"
+          Description="Port for the Questly web interface."
+          Type="Port" Display="always" Required="true" Mask="false">37000</Config>
+
+  <Config Name="MongoDB URI" Target="MONGO_URI" Default="mongodb://192.168.1.50:27017/"
+          Description="Where your MongoDB server is. Use the LAN IP unless both containers share a custom network. Add credentials if authentication is on: mongodb://user:pass@host:27017/?authSource=admin"
+          Type="Variable" Display="always" Required="true" Mask="false"></Config>
+
+  <Config Name="Secret Key" Target="SECRET_KEY" Default=""
+          Description="Signs login cookies. Set a long random value - generate one with: openssl rand -hex 32"
+          Type="Variable" Display="always" Required="true" Mask="true"></Config>
+
+  <Config Name="Timezone" Target="TZ" Default="UTC"
+          Description="Drives dates and the daily and weekly quest resets, e.g. Europe/London or America/New_York."
+          Type="Variable" Display="always" Required="true" Mask="false">UTC</Config>
+
+  <Config Name="Database Name" Target="MONGO_DB" Default="questly"
+          Description="Name of the database inside MongoDB. Only change this if you run more than one Questly."
+          Type="Variable" Display="advanced" Required="false" Mask="false">questly</Config>
+</Container>

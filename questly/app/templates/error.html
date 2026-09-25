@@ -1,0 +1,10 @@
+{% extends 'base.html' %}
+{% block title %}{{ code }} &middot; {{ app_name }}{% endblock %}
+{% block content %}
+<section class="empty empty--big">
+  <div class="empty__emoji">{% if code == 404 %}&#128373;&#65039;{% else %}&#128295;{% endif %}</div>
+  <h1>{{ code }}</h1>
+  <p>{{ message }}</p>
+  <a class="btn btn--primary" href="{{ url_for('public.index') }}">Back to the start</a>
+</section>
+{% endblock %}

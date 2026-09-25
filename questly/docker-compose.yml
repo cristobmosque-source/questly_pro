@@ -1,0 +1,34 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: questly-mongo
+    restart: unless-stopped
+    command: ["--quiet", "--logpath", "/dev/null"]
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  web:
+    build: .
+    container_name: questly-web
+    restart: unless-stopped
+    ports:
+      - "${PORT:-37000}:8000"
+    environment:
+      SECRET_KEY: "${SECRET_KEY:-dev-only-change-me}"
+      # Defaults to the bundled mongo service; override in .env to point
+      # at a MongoDB container you run yourself.
+      MONGO_URI: "${MONGO_URI:-mongodb://mongo:27017/}"
+      MONGO_DB: "${MONGO_DB:-questly}"
+      TZ: "${TZ:-Europe/London}"
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+volumes:
+  mongo-data:

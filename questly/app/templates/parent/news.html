@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block title %}Notifications &middot; {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="section__head section__head--page">
+  <h2>Notifications</h2>
+  <a class="section__link" href="{{ url_for('parent.account') }}">Where these go</a>
+</div>
+
+<div class="card feed">
+  {% for n in items %}
+    <div class="feed__row {{ 'is-fresh' if not n.read }}">
+      <span class="feed__emoji">{{ event_icon(n.event) }}</span>
+      <div class="feed__text">
+        <p>{{ n.title }}</p>
+        <span class="feed__when">{{ n.body }} &middot; {{ n.created_at | ago }}</span>
+      </div>
+    </div>
+  {% else %}
+    <div class="empty">
+      <div class="empty__emoji">&#128276;</div>
+      <p>Nothing yet.</p>
+    </div>
+  {% endfor %}
+</div>
+{% endblock %}

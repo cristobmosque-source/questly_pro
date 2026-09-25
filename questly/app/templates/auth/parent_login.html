@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% block title %}Grown-up login &middot; {{ app_name }}{% endblock %}
+{% block body_class %}gate{% endblock %}
+{% block chrome %}{% endblock %}
+
+{% block content %}
+<div class="gate__wrap gate__wrap--narrow">
+  <div class="gate__logo">
+    <span class="gate__face">&#129485;</span>
+    <h1 class="gate__title">Grown-ups</h1>
+    <p class="gate__sub">Log in to award points and run the shop.</p>
+  </div>
+
+  <form class="card card--form" method="post">
+    {{ csrf_field() }}
+    <label class="field">
+      <span>Email</span>
+      <input name="email" type="email" required autocomplete="username"
+             value="{{ remembered }}" {{ '' if remembered else 'autofocus' }}>
+    </label>
+    <label class="field">
+      <span>Password</span>
+      <input name="password" type="password" required autocomplete="current-password"
+             {{ 'autofocus' if remembered }}>
+    </label>
+
+    <label class="checkline">
+      <input type="checkbox" name="remember" value="1" checked>
+      <span>Keep me signed in on this device</span>
+    </label>
+
+    <button class="btn btn--primary btn--block" type="submit">Log in</button>
+  </form>
+
+  {% if remembered %}
+    <form method="post" action="{{ url_for('auth.forget_me') }}">
+      {{ csrf_field() }}
+      <button class="linkbtn" type="submit">Not {{ remembered }}? Forget this email</button>
+    </form>
+  {% endif %}
+
+  <a class="gate__back" href="{{ url_for('public.who') }}">&larr; Back to who's here</a>
+</div>
+{% endblock %}

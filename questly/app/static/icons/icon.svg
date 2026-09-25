@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Questly">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7c4dff"/>
+      <stop offset=".5" stop-color="#b04ddc"/>
+      <stop offset="1" stop-color="#ff4d94"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="230" fill="url(#g)"/>
+  <g>
+    <path d="M 512.0 262.0 L 578.2 438.9 L 766.9 447.2 L 619.1 564.8 L 669.5 746.8 L 512.0 642.6 L 354.5 746.8 L 404.9 564.8 L 257.1 447.2 L 445.8 438.9 Z" fill="#fff"/>
+    <path d="M 768.0 218.0 L 782.4 271.6 L 836.0 286.0 L 782.4 300.4 L 768.0 354.0 L 753.6 300.4 L 700.0 286.0 L 753.6 271.6 Z" fill="#fff" opacity=".65"/>
+    <path d="M 272.0 672.0 L 281.3 706.7 L 316.0 716.0 L 281.3 725.3 L 272.0 760.0 L 262.7 725.3 L 228.0 716.0 L 262.7 706.7 Z" fill="#fff" opacity=".65"/>
+  </g>
+</svg>

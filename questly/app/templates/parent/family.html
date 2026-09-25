@@ -1,0 +1,208 @@
+{% extends 'base.html' %}
+{% block title %}Family &middot; {{ app_name }}{% endblock %}
+
+{% block content %}
+<div class="section__head section__head--page"><h2>Family</h2></div>
+
+<section class="card card--form">
+  <h2 class="card__title">Add a child</h2>
+  <form method="post" action="{{ url_for('parent.add_kid') }}" class="formgrid">
+    {{ csrf_field() }}
+    <label class="field field--grow">
+      <span>Name</span>
+      <input name="name" required maxlength="40" placeholder="Ava">
+    </label>
+    <label class="field field--num">
+      <span>Starting points</span>
+      <input name="points" type="number" min="0" max="100000" value="0" inputmode="numeric">
+    </label>
+    <label class="field field--num">
+      <span>PIN <em>(optional)</em></span>
+      <input name="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6"
+             placeholder="4-6 digits" autocomplete="off">
+    </label>
+
+    <fieldset class="field field--full">
+      <span>Pick an avatar</span>
+      <div class="avatarpick">
+        {% for a in avatars %}
+          <label>
+            <input type="radio" name="avatar" value="{{ a }}" {{ 'checked' if loop.first }}>
+            <span>{{ a }}</span>
+          </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <fieldset class="field field--full">
+      <span>Pick a colour</span>
+      <div class="colourpick">
+        {% for name, hex in colors %}
+          <label title="{{ name }}">
+            <input type="radio" name="color" value="{{ hex }}" {{ 'checked' if loop.first }}>
+            <span style="--swatch:{{ hex }}"></span>
+          </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <button class="btn btn--primary" type="submit">Add child</button>
+  </form>
+</section>
+
+<div class="stacklist">
+  {% for kid in kids %}
+    <details class="rowcard" id="kid-{{ kid._id }}" style="--kid:{{ kid.color }}">
+      <summary>
+        <span class="rowcard__emoji">{{ kid.avatar }}</span>
+        <span class="rowcard__title">
+          {{ kid.name }}
+          <em class="tag">{{ 'PIN set' if kid.pin_hash else 'no PIN' }}</em>
+        </span>
+        <span class="price">{{ kid.points }} &#11088;</span>
+        <span class="rowcard__chev">&#9662;</span>
+      </summary>
+
+      <form method="post" action="{{ url_for('parent.update_kid', kid_id=kid._id) }}" class="formgrid">
+        {{ csrf_field() }}
+        <label class="field field--grow">
+          <span>Name</span>
+          <input name="name" value="{{ kid.name }}" maxlength="40" required>
+        </label>
+        <fieldset class="field field--full">
+          <span>Avatar</span>
+          <div class="avatarpick">
+            {% for a in avatars %}
+              <label>
+                <input type="radio" name="avatar" value="{{ a }}" {{ 'checked' if kid.avatar == a }}>
+                <span>{{ a }}</span>
+              </label>
+            {% endfor %}
+          </div>
+        </fieldset>
+        <fieldset class="field field--full">
+          <span>Colour</span>
+          <div class="colourpick">
+            {% for name, hex in colors %}
+              <label title="{{ name }}">
+                <input type="radio" name="color" value="{{ hex }}" {{ 'checked' if kid.color == hex }}>
+                <span style="--swatch:{{ hex }}"></span>
+              </label>
+            {% endfor %}
+          </div>
+        </fieldset>
+        <div class="rowcard__actions">
+          <button class="btn btn--primary btn--sm" type="submit" name="action" value="save">Save</button>
+        </div>
+      </form>
+
+      <form method="post" action="{{ url_for('parent.update_kid', kid_id=kid._id) }}" class="subform">
+        {{ csrf_field() }}
+        <input type="hidden" name="action" value="pin">
+        <label class="field field--num">
+          <span>Change PIN</span>
+          <input name="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6"
+                 placeholder="blank = none" autocomplete="off">
+        </label>
+        <button class="btn btn--ghost btn--sm" type="submit">Set PIN</button>
+      </form>
+
+      <div class="rowcard__body">
+        <h3 class="card__title">{{ kid.name }}'s notifications</h3>
+        <p class="card__note">They always see these in the app. Add a channel
+        to reach them on a phone or tablet as well.</p>
+        {% set owner = kid %}
+        {% set events = kid_events %}
+        {% include 'partials/channels.html' %}
+      </div>
+
+      <form method="post" action="{{ url_for('parent.update_kid', kid_id=kid._id) }}" class="subform subform--danger">
+        {{ csrf_field() }}
+        <button class="btn btn--danger btn--sm" type="submit" name="action" value="delete"
+                data-confirm="Remove {{ kid.name }} and delete all their points history? This can't be undone.">
+          Remove {{ kid.name }}
+        </button>
+      </form>
+    </details>
+  {% else %}
+    <div class="empty empty--big">
+      <div class="empty__emoji">&#128118;</div>
+      <p>No kids added yet.</p>
+    </div>
+  {% endfor %}
+</div>
+
+<div class="section__head"><h2>Grown-ups</h2></div>
+
+<div class="stacklist">
+  {% for p in parents %}
+    <details class="rowcard">
+      <summary>
+        <span class="rowcard__emoji">{{ p.avatar or '🧑' }}</span>
+        <span class="rowcard__title">
+          {{ p.name }}
+          {% if p._id == current_user._id %}<em class="tag">you</em>{% endif %}
+        </span>
+        <span class="grownup__email">{{ p.email }}</span>
+        <span class="rowcard__chev">&#9662;</span>
+      </summary>
+
+      {% if p._id == current_user._id %}
+        <div class="rowcard__body">
+          <p class="card__note">Change your name, email, icon or password on your own account page.</p>
+          <div class="rowcard__actions">
+            <a class="btn btn--primary btn--sm" href="{{ url_for('parent.account') }}">Edit my account</a>
+          </div>
+        </div>
+      {% else %}
+        <form method="post" action="{{ url_for('parent.reset_parent_password', parent_id=p._id) }}"
+              class="formgrid">
+          {{ csrf_field() }}
+          <p class="card__note field--full">
+            Set a new password for {{ p.name }} &mdash; useful if they're locked out.
+            Confirm with your own password.
+          </p>
+          <label class="field field--grow">
+            <span>New password for {{ p.name }}</span>
+            <input name="new_password" type="password" required minlength="8" autocomplete="new-password">
+          </label>
+          <label class="field field--grow">
+            <span>Your password</span>
+            <input name="your_password" type="password" required autocomplete="current-password">
+          </label>
+          <button class="btn btn--primary btn--sm" type="submit">Reset password</button>
+        </form>
+
+        <form method="post" action="{{ url_for('parent.remove_parent', parent_id=p._id) }}"
+              class="subform subform--danger">
+          {{ csrf_field() }}
+          <button class="btn btn--danger btn--sm" type="submit"
+                  data-confirm="Remove {{ p.name }}'s login? Their account and password are deleted.">
+            Remove {{ p.name }}
+          </button>
+        </form>
+      {% endif %}
+    </details>
+  {% endfor %}
+</div>
+
+<section class="card card--form">
+  <h2 class="card__title">Add a grown-up</h2>
+  <form method="post" action="{{ url_for('parent.add_parent') }}" class="formgrid">
+    {{ csrf_field() }}
+    <label class="field field--grow">
+      <span>Name</span>
+      <input name="name" required maxlength="40" placeholder="Partner's name">
+    </label>
+    <label class="field field--grow">
+      <span>Email</span>
+      <input name="email" type="email" required autocomplete="off">
+    </label>
+    <label class="field field--grow">
+      <span>Password</span>
+      <input name="password" type="password" required minlength="8" autocomplete="new-password">
+    </label>
+    <button class="btn btn--primary" type="submit">Add grown-up</button>
+  </form>
+</section>
+{% endblock %}
