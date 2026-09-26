@@ -84,7 +84,7 @@ export default function QuestForm({ initial, kids, onSubmit, submitting, submitL
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="q-points">Puntos</Label>
-          <Input id="q-points" type="number" min={1} max={1000} required
+          <Input id="q-points" type="number" min={1} max={100000} step={1} required
             value={form.points} onChange={(e) => set("points")(e.target.value)} />
         </div>
       </div>
