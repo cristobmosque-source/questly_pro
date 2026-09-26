@@ -61,6 +61,7 @@ export function repeatLabel(quest) {
 export const STATE_META = {
   open: { label: "Por hacer", className: "bg-emerald-100 text-emerald-700" },
   pending: { label: "Por revisar", className: "bg-amber-100 text-amber-700" },
+  pending_review: { label: "Sin registrar", className: "bg-amber-100 text-amber-800" },
   done: { label: "¡Hecha!", className: "bg-violet-100 text-violet-700" },
   missed: { label: "No realizada", className: "bg-rose-100 text-rose-700" },
   rejected: { label: "Rechazada", className: "bg-slate-200 text-slate-600" },

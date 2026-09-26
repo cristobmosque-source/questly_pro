@@ -97,6 +97,7 @@ export default function KidHome() {
   const yRejected = yesterday.items.filter((i) => i.state === "rejected");
   const yMissed = yesterday.items.filter((i) => i.state === "missed");
   const yNA = yesterday.items.filter((i) => i.state === "not_applicable");
+  const yReview = yesterday.items.filter((i) => i.state === "pending_review");
   const yTotal = yesterday.items.length;
 
   const YesterdayGroup = ({ label, items, emoji }) => (
@@ -129,6 +130,7 @@ export default function KidHome() {
           </div>
           {yDone.length ? <YesterdayGroup label="Hechas" emoji="✅" items={yDone} /> : null}
           {yPending.length ? <YesterdayGroup label="Por revisar" emoji="⏳" items={yPending} /> : null}
+          {yReview.length ? <YesterdayGroup label="Sin registrar — un adulto las revisará" emoji="⚠️" items={yReview} /> : null}
           {yRejected.length ? <YesterdayGroup label="Rechazadas" emoji="🚫" items={yRejected} /> : null}
           {yNA.length ? <YesterdayGroup label="No aplica" emoji="➖" items={yNA} /> : null}
           {yMissed.length ? <YesterdayGroup label="No realizadas" emoji="❌" items={yMissed} /> : null}

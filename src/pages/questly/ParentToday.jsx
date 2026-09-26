@@ -6,7 +6,7 @@ import { ErrorView, Loading } from "@/components/questly/ApiState";
 import ConfirmDialog from "@/components/questly/ConfirmDialog";
 import StateChip from "@/components/questly/StateChip";
 import DayQuestList from "@/components/questly/DayQuestList";
-import PastInstanceActions from "@/components/questly/PastInstanceActions";
+import ReviewDialog from "@/components/questly/ReviewDialog";
 import { api, fmtDateLabel, fmtPoints, notifyPointsChanged } from "@/lib/questlyApi";
 import { repeatLabel } from "@/lib/questlyData";
 
@@ -18,6 +18,7 @@ export default function ParentToday() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [target, setTarget] = useState(null); // { quest, kid, date? }
+  const [reviewTarget, setReviewTarget] = useState(null); // instancia vencida sin registro
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -49,6 +50,26 @@ export default function ParentToday() {
     }
   };
 
+  // ⚠️ Instancia vencida sin registro ("Pendiente de revisión"): el adulto
+  // decide qué pasó — ✅ 100% · 🟡 25% · ❌ −50% · 🚫 0 puntos.
+  const resolveReview = async (result, comment) => {
+    setBusy(true);
+    try {
+      const res = await api(`/parent/quests/${reviewTarget.quest_id}/instances/${reviewTarget.kid_id}/resolve`, {
+        method: "POST",
+        body: { date: reviewTarget.date, period: reviewTarget.period, result, comment },
+      });
+      toast({ title: "Registrado", description: res.message });
+      setReviewTarget(null);
+      notifyPointsChanged();
+      await load();
+    } catch (e) {
+      toast({ title: "Ups", description: e.message, variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (error) return <ErrorView error={error} onRetry={load} />;
   if (!data) return <Loading label="Mirando las quests…" />;
 
@@ -59,7 +80,9 @@ export default function ParentToday() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-extrabold">Ayer y hoy</h1>
-        <p className="text-sm text-muted-foreground">Resuelve los olvidos: marcar como hecha, penalizar o no aplica.</p>
+        <p className="text-sm text-muted-foreground">
+          Las quests que vencen sin registro quedan pendientes de revisión: decídelas aquí o en Aprobaciones.
+        </p>
       </div>
 
       <section>
@@ -83,10 +106,17 @@ export default function ParentToday() {
               <DayQuestList
                 items={items}
                 actions={(q) =>
-                  q.state === "missed" && !q.penalty_applied ? (
-                    <PastInstanceActions item={q} kid={kid} date={data.yesterday_date} onDone={load} />
-                  ) : q.state === "missed" && q.penalty_applied ? (
-                    <span className="text-xs font-semibold text-rose-500">-{fmtPoints(q.penalty)} aplicado</span>
+                  q.state === "pending_review" ? (
+                    <Button size="sm" className="bg-violet-600 hover:bg-violet-700 font-bold"
+                      onClick={() => setReviewTarget({
+                        quest_id: q.id, kid_id: kid.id, kid_name: kid.name,
+                        title: q.title, emoji: q.emoji, points: q.points, penalty: q.penalty,
+                        date: data.yesterday_date,
+                      })}>
+                      Revisar
+                    </Button>
+                  ) : q.state === "missed" ? (
+                    <span className="text-xs font-semibold text-rose-500">−{fmtPoints(q.penalty)} aplicado</span>
                   ) : null
                 }
               />
@@ -147,6 +177,14 @@ export default function ParentToday() {
           ))}
         </div>
       </section>
+
+      <ReviewDialog
+        open={!!reviewTarget}
+        target={reviewTarget}
+        busy={busy}
+        onResolve={resolveReview}
+        onClose={() => setReviewTarget(null)}
+      />
 
       <ConfirmDialog
         open={!!target}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, Repeat, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
@@ -9,6 +9,7 @@ import {
 import { ErrorView, Loading } from "@/components/questly/ApiState";
 import ConfirmDialog from "@/components/questly/ConfirmDialog";
 import QuestForm from "@/components/questly/QuestForm";
+import ReassignDialog from "@/components/questly/ReassignDialog";
 import { api } from "@/lib/questlyApi";
 import { daysSummary, repeatLabel } from "@/lib/questlyData";
 
@@ -21,6 +22,7 @@ export default function ParentQuests() {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(null); // quest | "new"
   const [deleting, setDeleting] = useState(null);
+  const [reassigning, setReassigning] = useState(null); // quest "una sola vez" completada
 
   const load = useCallback(async () => {
     setError(null);
@@ -87,6 +89,24 @@ export default function ParentQuests() {
     }
   };
 
+  // ♻️ Reasignar una quest "una sola vez" completada: crea una nueva instancia
+  // para el niño elegido; el historial anterior queda intacto.
+  const confirmReassign = async (kidId) => {
+    setBusy(true);
+    try {
+      const res = await api(`/parent/quests/${reassigning.id}/reassign`, {
+        method: "POST", body: { kid_id: kidId },
+      });
+      setData((d) => ({ ...d, quests: res.quests }));
+      toast({ title: "Reasignada", description: res.message });
+      setReassigning(null);
+    } catch (e) {
+      toast({ title: "Ups", description: e.message, variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (error) return <ErrorView error={error} onRetry={load} />;
   if (!data) return <Loading label="Cargando quests…" />;
 
@@ -105,7 +125,12 @@ export default function ParentQuests() {
             <div className="flex items-start gap-3 flex-wrap">
               <span className="h-11 w-11 rounded-xl bg-violet-50 grid place-items-center text-2xl">{q.emoji}</span>
               <div className="flex-1 min-w-0">
-                <p className="font-bold">{q.title} <span className="text-amber-600 font-extrabold text-sm">⭐ {q.points}</span></p>
+                <p className="font-bold">
+                  {q.title} <span className="text-amber-600 font-extrabold text-sm">⭐ {q.points}</span>
+                  {q.repeat === "once" && q.completed_once ? (
+                    <span className="ml-2 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold px-2 py-0.5">✅ Completada</span>
+                  ) : null}
+                </p>
                 <p className="text-xs text-muted-foreground">
                   {repeatLabel(q)} · {q.repeat === "once" && q.due_date ? `Fecha: ${q.due_date} · ` : ""}
                   {q.times_per_period > 1 ? `${q.times_per_period} veces/período · ` : ""}
@@ -118,6 +143,11 @@ export default function ParentQuests() {
               </div>
               <div className="flex items-center gap-2">
                 <Switch checked={q.active} onCheckedChange={() => toggle(q)} />
+                {q.repeat === "once" && q.completed_once ? (
+                  <Button size="icon" variant="ghost" title="Reasignar" onClick={() => setReassigning(q)}>
+                    <Repeat className="h-4 w-4" />
+                  </Button>
+                ) : null}
                 <Button size="icon" variant="ghost" onClick={() => setEditing(q)} title="Editar">
                   <Pencil className="h-4 w-4" />
                 </Button>
@@ -155,6 +185,16 @@ export default function ParentQuests() {
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <ReassignDialog
+        open={!!reassigning}
+        quest={reassigning}
+        kids={data.kids}
+        currentName={reassigning ? kidNames(reassigning) : ""}
+        busy={busy}
+        onConfirm={confirmReassign}
+        onClose={() => setReassigning(null)}
+      />
 
       <ConfirmDialog
         open={!!deleting}

@@ -17,6 +17,7 @@ function summaryParts(sum, keys) {
   if (sum.done) parts.push(`✅ ${plural(sum.done, "hecha", "hechas")}`);
   if (sum.pending) parts.push(`⏳ ${plural(sum.pending, "por revisar", "por revisar")}`);
   if (sum.rejected) parts.push(`🚫 ${plural(sum.rejected, "rechazada", "rechazadas")}`);
+  if (sum.pending_review) parts.push(`⚠️ ${plural(sum.pending_review, "sin registrar", "sin registrar")}`);
   if (sum.missed) parts.push(`❌ ${plural(sum.missed, "no realizada", "no realizadas")}`);
   if (sum.not_applicable) parts.push(`➖ ${plural(sum.not_applicable, "no aplica", "no aplica")}`);
   if (keys.includes("open") && sum.open) parts.push(`👉 ${plural(sum.open, "por hacer", "por hacer")}`);
@@ -75,6 +76,7 @@ export default function ParentDashboard() {
 
   const claimsSample = data.claims.slice(0, 3);
   const redemptionsSample = data.redemptions.slice(0, 3);
+  const reviewSample = (data.reviews || []).slice(0, 3);
 
   return (
     <div className="space-y-6">
@@ -168,22 +170,23 @@ export default function ParentDashboard() {
           </Link>
         </div>
         <ul className="mt-3 divide-y divide-slate-100">
-          {[...claimsSample.map((c) => ({ ...c, type: "claim" })),
+          {[...reviewSample.map((r) => ({ ...r, type: "review" })),
+            ...claimsSample.map((c) => ({ ...c, type: "claim" })),
             ...redemptionsSample.map((r) => ({ ...r, type: "reward" }))].map((p) => (
             <li key={p.type + p.id} className="py-2.5 flex items-center gap-3">
               <span className="text-xl">{p.emoji}</span>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold truncate">
                   {p.kid_name} — {p.title}
-                  {p.type === "claim" ? ` (+${fmtPoints(p.points)})` : ` (${fmtPoints(p.cost)} pts)`}
+                  {p.type === "reward" ? ` (${fmtPoints(p.cost)} pts)` : ` (+${fmtPoints(p.points)})`}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  {p.type === "claim" ? "Quest completada" : "Recompensa canjeada"}
+                  {p.type === "review" ? "Vencida sin registrar — revisar" : p.type === "claim" ? "Quest completada" : "Recompensa canjeada"}
                 </p>
               </div>
             </li>
           ))}
-          {!claimsSample.length && !redemptionsSample.length ? (
+          {!reviewSample.length && !claimsSample.length && !redemptionsSample.length ? (
             <li className="py-4 text-sm text-muted-foreground text-center">Nada pendiente. ¡Todo al día!</li>
           ) : null}
         </ul>

@@ -22,8 +22,8 @@ export default function DayQuestList({ items = [], actions }) {
               {q.comment ? ` · 🚫 ${q.comment}` : ""}
             </p>
           </div>
-          {q.state === "missed" && !q.penalty_applied ? (
-            <span className="text-xs font-bold rounded-full px-2.5 py-1 bg-slate-100 text-slate-500">
+          {q.state === "pending_review" ? (
+            <span className="text-xs font-bold rounded-full px-2.5 py-1 bg-amber-100 text-amber-800">
               ⚠️ Sin registrar
             </span>
           ) : (
