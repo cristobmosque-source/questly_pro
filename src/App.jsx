@@ -8,6 +8,20 @@ import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import ScrollToTop from './components/ScrollToTop';
 // Add page imports here
 
+import EntryScreen from '@/pages/questly/EntryScreen';
+import KidHome from '@/pages/questly/KidHome';
+import KidShop from '@/pages/questly/KidShop';
+import KidHistory from '@/pages/questly/KidHistory';
+import ParentDashboard from '@/pages/questly/ParentDashboard';
+import ParentToday from '@/pages/questly/ParentToday';
+import ParentQuests from '@/pages/questly/ParentQuests';
+import ParentApprovals from '@/pages/questly/ParentApprovals';
+import ParentRewards from '@/pages/questly/ParentRewards';
+import ParentKids from '@/pages/questly/ParentKids';
+import ParentKidDetail from '@/pages/questly/ParentKidDetail';
+import KidShell from '@/components/questly/KidShell';
+import ParentShell from '@/components/questly/ParentShell';
+
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
 
@@ -35,6 +49,21 @@ const AuthenticatedApp = () => {
   return (
     <Routes>
       {/* Add your page Route elements here */}
+      <Route path="/" element={<EntryScreen />} />
+      <Route element={<KidShell />}>
+        <Route path="/kid" element={<KidHome />} />
+        <Route path="/kid/shop" element={<KidShop />} />
+        <Route path="/kid/history" element={<KidHistory />} />
+      </Route>
+      <Route element={<ParentShell />}>
+        <Route path="/parent" element={<ParentDashboard />} />
+        <Route path="/parent/today" element={<ParentToday />} />
+        <Route path="/parent/quests" element={<ParentQuests />} />
+        <Route path="/parent/approvals" element={<ParentApprovals />} />
+        <Route path="/parent/rewards" element={<ParentRewards />} />
+        <Route path="/parent/kids" element={<ParentKids />} />
+        <Route path="/parent/kids/:id" element={<ParentKidDetail />} />
+      </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );

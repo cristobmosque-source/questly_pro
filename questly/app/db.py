@@ -72,3 +72,9 @@ def ensure_indexes(db):
         unique=True,
         partialFilterExpression={"status": "missed"},
     )
+    # Bearer tokens for the JSON API live on the user's document.
+    db.users.create_index(
+        [("api_token", ASCENDING)],
+        unique=True,
+        partialFilterExpression={"api_token": {"$type": "string"}},
+    )

@@ -49,12 +49,13 @@ def create_app(overrides=None):
     _register_context(app)
     _register_filters(app)
 
-    from .views import auth, kid, parent, public
+    from .views import api, auth, kid, parent, public
 
     app.register_blueprint(public.bp)
     app.register_blueprint(auth.bp)
     app.register_blueprint(kid.bp)
     app.register_blueprint(parent.bp)
+    app.register_blueprint(api.bp)
 
     from . import cli
     cli.register(app)
@@ -94,6 +95,9 @@ def _register_security(app):
     @app.before_request
     def csrf_protect():
         if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
+            return None
+        # The JSON API authenticates with its own bearer token instead.
+        if request.path.startswith("/api/"):
             return None
         sent = request.form.get("_csrf") or request.headers.get("X-CSRF-Token", "")
         expected = session.get("_csrf", "")
