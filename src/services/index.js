@@ -1,35 +1,14 @@
-// CAPA DE SERVICIOS — los componentes React usan `api()` sin saber si los
-// datos vienen del modo demo (localStorage) o del backend Flask real.
-// El modo se guarda en localStorage y se cambia desde Configuración.
+// CAPA DE SERVICIOS DE QUESTLY — única fuente de datos de la aplicación.
+// Los componentes usan `api()` sin saber dónde viven los datos.
 
-import { demoApi, restoreDemoData } from "@/services/demoApi";
-import { httpApi, getApiBase, setApiBase, DEFAULT_BASE } from "@/services/questlyApi";
+import { storeApi, resetStore } from "@/services/store";
 
 export { ApiError } from "@/services/error";
 export { getToken, getSessionUser, setSession, clearSession } from "@/services/session";
-
-const MODE_KEY = "questly_mode";
-
-export function getMode() {
-  try {
-    return localStorage.getItem(MODE_KEY) === "api" ? "api" : "demo";
-  } catch {
-    return "demo";
-  }
-}
-
-export function isDemoMode() {
-  return getMode() === "demo";
-}
-
-export function setMode(mode) {
-  localStorage.setItem(MODE_KEY, mode === "api" ? "api" : "demo");
-}
-
-export { restoreDemoData, getApiBase, setApiBase, DEFAULT_BASE };
+export { resetStore };
 
 export async function api(path, opts) {
-  return isDemoMode() ? demoApi(path, opts) : httpApi(path, opts);
+  return storeApi(path, opts);
 }
 
 // Avisan a los layouts que hay datos frescos (puntos, aprobaciones).

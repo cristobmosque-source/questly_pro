@@ -1,8 +1,5 @@
-import { useState } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { getApiBase, setApiBase } from "@/lib/questlyApi";
 
 export function Loading({ label = "Cargando…" }) {
   return (
@@ -13,32 +10,14 @@ export function Loading({ label = "Cargando…" }) {
   );
 }
 
-// Muestra el error de una llamada al API; si es de conexión, deja cambiar
-// la dirección del servidor de Questly.
+// Muestra el error de una llamada, con opción de reintentar.
 export function ErrorView({ error, onRetry }) {
-  const [url, setUrl] = useState(getApiBase());
   if (!error) return null;
   return (
     <div className="max-w-md mx-auto my-10 p-6 rounded-2xl bg-white border border-rose-200 shadow-sm text-center">
       <AlertTriangle className="mx-auto h-10 w-10 text-rose-500" />
       <p className="mt-3 font-medium text-rose-700">{error.message}</p>
-      {error.network ? (
-        <div className="mt-2 space-y-2">
-          <p className="text-sm text-muted-foreground">
-            Asegúrate de que Questly esté corriendo (por ejemplo{" "}
-            <code className="text-xs">docker compose up</code>) y ajusta la
-            dirección si es distinta.
-          </p>
-          <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="http://localhost:37000" />
-        </div>
-      ) : null}
-      <Button
-        className="mt-4"
-        onClick={() => {
-          if (error.network) setApiBase(url);
-          onRetry && onRetry();
-        }}
-      >
+      <Button className="mt-4" onClick={() => onRetry && onRetry()}>
         <RefreshCw className="mr-2 h-4 w-4" /> Reintentar
       </Button>
     </div>
