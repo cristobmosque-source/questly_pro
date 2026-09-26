@@ -1,12 +1,15 @@
+import { useState } from "react";
 import { Check, Clock, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import ConfirmDialog from "@/components/questly/ConfirmDialog";
 import StateChip from "@/components/questly/StateChip";
 import { fmtPoints } from "@/lib/questlyApi";
 import { cn } from "@/lib/utils";
 
 // Tarjeta grande de quest para el niño: emoji, puntos, subtareas y acción.
-export default function QuestCard({ quest, onClaim, onToggleStep, busy = false }) {
+export default function QuestCard({ quest, onClaim, onRetract, onToggleStep, busy = false }) {
+  const [askRetract, setAskRetract] = useState(false);
   const stepsLeft = quest.steps_total - quest.steps_done;
   const repeatable = quest.limit > 1;
 
@@ -80,9 +83,26 @@ export default function QuestCard({ quest, onClaim, onToggleStep, busy = false }
               {stepsLeft > 0 ? `Faltan ${stepsLeft} pasos` : "¡La hice!"}
             </Button>
           ) : quest.state === "pending" ? (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3.5 py-2 text-sm font-bold text-amber-700">
-              <Clock className="h-4 w-4" /> Por revisar
-            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-3.5 py-2 text-sm font-bold text-amber-700">
+                <Clock className="h-4 w-4" /> Por revisar
+              </span>
+              <Button size="sm" variant="ghost" className="text-slate-500 hover:text-slate-700"
+                disabled={busy} onClick={() => setAskRetract(true)}>
+                Me retracto
+              </Button>
+              <ConfirmDialog
+                open={askRetract}
+                onCancel={() => setAskRetract(false)}
+                title="¿Quieres cancelar que marcaste esta tarea como realizada?"
+                description="Puedes volver a hacerla y marcarla nuevamente cuando esté lista."
+                confirmLabel="Sí, volver a pendiente"
+                onConfirm={() => {
+                  setAskRetract(false);
+                  if (onRetract) onRetract(quest);
+                }}
+              />
+            </div>
           ) : (
             <StateChip state={quest.state} />
           )}

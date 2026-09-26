@@ -6,7 +6,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { ErrorView, Loading } from "@/components/questly/ApiState";
 import QuestCard from "@/components/questly/QuestCard";
 import DayQuestList from "@/components/questly/DayQuestList";
-import { api, fmtDateLabel, fmtMoney, fmtPoints, kidGreeting, notifyPointsChanged } from "@/lib/questlyApi";
+import { api, fmtDateLabel, fmtMoney, fmtPoints, kidGreeting, notifyApprovalsChanged, notifyPointsChanged } from "@/lib/questlyApi";
 
 // Inicio del niño: saludo con puntos y su equivalente en pesos, resumen de
 // AYER (hechas / no realizadas) y quests de HOY.
@@ -35,6 +35,22 @@ export default function KidHome() {
       confetti({ particleCount: 90, spread: 70, origin: { y: 0.7 }, colors: [data.kid.color || "#7c4dff", "#fbbf24", "#34d399"] });
       toast({ title: "🎉 " + res.message });
       notifyPointsChanged();
+    } catch (e) {
+      toast({ title: "Ups", description: e.message, variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Retractación: solo mientras la quest está pendiente de revisión. Vuelve a
+  // "por hacer" sin puntos, sin penalización y sin transacción.
+  const retract = async (quest) => {
+    setBusy(true);
+    try {
+      const res = await api(`/kid/quests/${quest.id}/retract`, { method: "POST" });
+      setData((d) => ({ ...d, kid: res.kid, quests: res.quests }));
+      toast({ title: "⏳ " + res.message });
+      notifyApprovalsChanged();
     } catch (e) {
       toast({ title: "Ups", description: e.message, variant: "destructive" });
     } finally {
@@ -117,7 +133,7 @@ export default function KidHome() {
         ) : null}
         <div className="space-y-4">
           {open.map((q) => (
-            <QuestCard key={q.id} quest={q} onClaim={claim} onToggleStep={toggleStep} busy={busy} />
+            <QuestCard key={q.id} quest={q} onClaim={claim} onRetract={retract} onToggleStep={toggleStep} busy={busy} />
           ))}
         </div>
 
@@ -126,7 +142,7 @@ export default function KidHome() {
         ) : null}
         <div className="space-y-4">
           {waiting.map((q) => (
-            <QuestCard key={q.id} quest={q} onClaim={claim} onToggleStep={toggleStep} busy={busy} />
+            <QuestCard key={q.id} quest={q} onClaim={claim} onRetract={retract} onToggleStep={toggleStep} busy={busy} />
           ))}
         </div>
 
@@ -135,7 +151,7 @@ export default function KidHome() {
         ) : null}
         <div className="space-y-4">
           {done.map((q) => (
-            <QuestCard key={q.id} quest={q} onClaim={claim} onToggleStep={toggleStep} busy={busy} />
+            <QuestCard key={q.id} quest={q} onClaim={claim} onRetract={retract} onToggleStep={toggleStep} busy={busy} />
           ))}
         </div>
 
@@ -144,7 +160,7 @@ export default function KidHome() {
         ) : null}
         <div className="space-y-4">
           {missed.map((q) => (
-            <QuestCard key={q.id} quest={q} onClaim={claim} onToggleStep={toggleStep} busy={busy} />
+            <QuestCard key={q.id} quest={q} onClaim={claim} onRetract={retract} onToggleStep={toggleStep} busy={busy} />
           ))}
         </div>
 

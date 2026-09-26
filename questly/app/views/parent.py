@@ -138,11 +138,11 @@ def decide_redemption_route(redemption_id):
 @bp.post("/approvals/quest/<claim_id>")
 @parent_required
 def decide_claim_route(claim_id):
-    approve = request.form.get("decision") == "approve"
-    claim = decide_quest_claim(get_db(), claim_id, approve, g.user)
+    decision = request.form.get("decision", "")
+    claim = decide_quest_claim(get_db(), claim_id, decision, g.user)
     if not claim:
         flash("That request was already dealt with.", "warn")
-    elif approve:
+    elif decision == "approve":
         db = get_db()
         notify(db, claim["kid_id"], "quest_approved",
                f"{claim['quest_emoji']} {claim['quest_title']} approved!",
@@ -151,11 +151,25 @@ def decide_claim_route(claim_id):
         check_goal_reached(db, claim["kid_id"])
         flash(f"{claim['kid_name']} earned {claim['points']} points for "
               f"'{claim['quest_title']}'.", "success")
+    elif decision == "partial":
+        db = get_db()
+        notify(db, claim["kid_id"], "quest_approved",
+               f"{claim['quest_emoji']} {claim['quest_title']} — done halfway",
+               compose(f"You earned {claim['awarded']} points "
+                       f"(25% of {claim['points']}).",
+                       f"Checked by {g.user['name']}."))
+        check_goal_reached(db, claim["kid_id"])
+        flash(f"{claim['kid_name']} earned {claim['awarded']} of "
+              f"{claim['points']} points for '{claim['quest_title']}' "
+              "(done halfway).", "success")
     else:
         notify(get_db(), claim["kid_id"], "quest_rejected",
-               f"{claim['quest_title']} was sent back",
-               "Have another go and mark it done again.")
-        flash(f"Sent '{claim['quest_title']}' back to {claim['kid_name']}.", "info")
+               f"{claim['quest_title']} wasn't actually done",
+               f"{abs(claim['penalty'])} points came off — "
+               "better luck next time!")
+        flash(f"'{claim['quest_title']}' marked as not done for "
+              f"{claim['kid_name']} — {abs(claim['penalty'])} points "
+              "taken off.", "info")
     return redirect(safe_next(url_for("parent.approvals")))
 
 

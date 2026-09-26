@@ -202,6 +202,53 @@ check("parent rejects the redemption (refund)", code == 200)
 code, data = call("get", f"/parent/kids/{kid['id']}", token=PT)
 check("refund restores points", data["kid"]["points"] == 97.5)
 
+# --- verdicts 100% / 25% / -50% + kid retraction ----------------------------
+code, data = call("post", "/parent/quests", {
+    "title": "Leer un rato", "emoji": "📖", "points": 8,
+    "repeat": "daily", "assigned_to": [kid["id"]],
+}, PT)
+check("creates the reading quest", code == 200)
+read = next(q for q in data["quests"] if q["title"] == "Leer un rato")
+
+code, data = call("post", f"/kid/quests/{read['id']}/claim", token=KT)
+check("kid claims the reading quest", code == 200)
+code, data = call("post", f"/kid/quests/{read['id']}/retract", token=KT)
+check("kid retracts while it's pending", code == 200)
+check("retracted quest is open again",
+      any(q["state"] == "open" for q in data["quests"]
+          if q["id"] == read["id"]))
+code, data = call("post", f"/kid/quests/{read['id']}/retract", token=KT)
+check("nothing pending means no retraction", code == 400)
+
+code, data = call("post", f"/kid/quests/{read['id']}/claim", token=KT)
+check("claims again after retracting", code == 200)
+code, data = call("get", "/parent/approvals", token=PT)
+claim2 = data["claims"][0]
+code, data = call("post", f"/parent/claims/{claim2['id']}",
+                  {"decision": "partial"}, PT)
+check("halfway verdict pays 25% (8 -> 2)", code == 200)
+code, data = call("get", f"/parent/kids/{kid['id']}", token=PT)
+check("balance includes the 2 partial points", data["kid"]["points"] == 99.5)
+check("history records the partial payout",
+      any(h["kind"] == "partial" for h in data["history"]))
+
+code, data = call("get", "/kid/home", token=KT)
+closet = next(q for q in data["quests"] if q["title"] == "Ordenar el clóset")
+code, data = call("post", f"/kid/quests/{closet['id']}/claim", token=KT)
+check("kid claims the once quest", code == 200)
+code, data = call("get", "/parent/approvals", token=PT)
+claim3 = data["claims"][0]
+code, data = call("post", f"/parent/claims/{claim3['id']}",
+                  {"decision": "not_done"}, PT)
+check("not-done verdict costs 50% (30 -> -15)", code == 200)
+code, data = call("get", f"/parent/kids/{kid['id']}", token=PT)
+check("balance after not_done is 84.5", data["kid"]["points"] == 84.5)
+code, data = call("post", f"/kid/quests/{read['id']}/retract", token=KT)
+check("retracting a decided claim is refused", code == 400)
+code, data = call("post", f"/parent/claims/{claim3['id']}",
+                  {"decision": "approve"}, PT)
+check("the verdict is final — it can't be redone", code == 409)
+
 # --- goal -------------------------------------------------------------------
 code, data = call("post", f"/kid/goal/{reward['id']}", token=KT)
 check("kid sets a savings goal", code == 200)

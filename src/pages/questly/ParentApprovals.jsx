@@ -3,7 +3,7 @@ import { Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { ErrorView, Loading } from "@/components/questly/ApiState";
-import { api, fmtPoints, fmtWhen, notifyApprovalsChanged, notifyPointsChanged } from "@/lib/questlyApi";
+import { api, fmtMoney, fmtPoints, fmtWhen, notifyApprovalsChanged, notifyPointsChanged } from "@/lib/questlyApi";
 
 // Aprobaciones: quests completadas y recompensas canjeadas, una decisión
 // cada vez — la lógica (puntos, reembolsos, stock) vive en el backend.
@@ -43,18 +43,43 @@ export default function ParentApprovals() {
   if (error) return <ErrorView error={error} onRetry={load} />;
   if (!data) return <Loading label="Revisando pendientes…" />;
 
+  // Pagos exactos por veredicto: 100% hecha · 25% a medias · -50% no realizada.
+  const quarter = (p) => Math.round(p * 0.25 * 10) / 10;
+  const half = (p) => Math.round(p / 2 * 10) / 10;
+
   const DecisionButtons = ({ kind, item }) => (
-    <div className="flex gap-2">
-      <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 font-bold"
-        disabled={busyId === kind + item.id}
-        onClick={() => decide(kind, item, "approve")}>
-        <Check className="h-4 w-4 mr-1" /> Aprobar
-      </Button>
-      <Button size="sm" variant="outline" disabled={busyId === kind + item.id}
-        onClick={() => decide(kind, item, "reject")}>
-        <X className="h-4 w-4 mr-1" /> Rechazar
-      </Button>
-    </div>
+    kind === "claim" ? (
+      <div className="flex gap-2 flex-wrap">
+        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 font-bold"
+          disabled={busyId === kind + item.id}
+          onClick={() => decide(kind, item, "approve")}>
+          <Check className="h-4 w-4 mr-1" /> Hecha +{fmtPoints(item.points)}
+        </Button>
+        <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white font-bold"
+          disabled={busyId === kind + item.id}
+          onClick={() => decide(kind, item, "partial")}>
+          🟡 A medias +{fmtPoints(quarter(item.points))}
+        </Button>
+        <Button size="sm" variant="outline"
+          className="text-rose-600 border-rose-200 hover:bg-rose-50 font-bold"
+          disabled={busyId === kind + item.id}
+          onClick={() => decide(kind, item, "not_done")}>
+          <X className="h-4 w-4 mr-1" /> No la hizo −{fmtPoints(half(item.points))}
+        </Button>
+      </div>
+    ) : (
+      <div className="flex gap-2">
+        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 font-bold"
+          disabled={busyId === kind + item.id}
+          onClick={() => decide(kind, item, "approve")}>
+          <Check className="h-4 w-4 mr-1" /> Entregar
+        </Button>
+        <Button size="sm" variant="outline" disabled={busyId === kind + item.id}
+          onClick={() => decide(kind, item, "reject")}>
+          <X className="h-4 w-4 mr-1" /> Rechazar
+        </Button>
+      </div>
+    )
   );
 
   return (
@@ -63,6 +88,9 @@ export default function ParentApprovals() {
 
       <section>
         <h2 className="font-bold mb-3">Quests completadas ({data.claims.length})</h2>
+        <p className="text-xs text-muted-foreground -mt-2 mb-3">
+          ✅ Hecha 100% · 🟡 Hecha a medias 25% · ❌ No realizada −50% (la decisión es definitiva)
+        </p>
         {data.claims.length ? (
           <ul className="space-y-3">
             {data.claims.map((c) => (
@@ -70,7 +98,7 @@ export default function ParentApprovals() {
                 <span className="text-2xl">{c.emoji}</span>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm">
-                    {c.kid_name}: {c.title} <span className="text-emerald-600 font-bold">⭐ +{fmtPoints(c.points)}</span>
+                    {c.kid_name}: {c.title} <span className="text-amber-600 font-bold">⭐ {fmtPoints(c.points)} · 💰 {fmtMoney(c.points)}</span>
                   </p>
                   <p className="text-xs text-muted-foreground">{fmtWhen(c.at)}</p>
                 </div>

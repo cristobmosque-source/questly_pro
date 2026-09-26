@@ -470,6 +470,26 @@ function handle(state, method, path, body) {
     return { kid: pubKid(kid), quests: kidQuests(state, kid, tStr), message: "¡Listo! Ahora queda esperando que un adulto la revise." };
   }
 
+  // Retractación del niño: SOLO mientras la instancia está pendiente de
+  // revisión. Vuelve a "por hacer" sin sumar ni restar puntos, sin
+  // penalización, sin transacción y sin consumir el cupo del día.
+  if (method === "POST" && (m = path.match(/^\/kid\/quests\/([^/]+)\/retract$/))) {
+    const kid = requireKid(state);
+    const quest = state.quests.find((q) => q.id === m[1]);
+    if (!quest) throw new ApiError("Esta quest ya no existe.", { status: 404 });
+    const period = periodFor(quest, tStr);
+    const idx = state.claims.findIndex((c) =>
+      c.quest_id === quest.id && c.kid_id === kid.id && c.period === period && c.status === "pending");
+    if (idx === -1)
+      throw new ApiError("Solo puedes retractarte mientras está pendiente de revisión.");
+    state.claims.splice(idx, 1);
+    return {
+      kid: pubKid(kid),
+      quests: kidQuests(state, kid, tStr),
+      message: "Quedó pendiente otra vez: hazla bien y vuelve a marcarla cuando estés listo.",
+    };
+  }
+
   if (method === "POST" && (m = path.match(/^\/kid\/quests\/([^/]+)\/step\/([^/]+)$/))) {
     const kid = requireKid(state);
     const quest = state.quests.find((q) => q.id === m[1]);
@@ -653,6 +673,8 @@ function handle(state, method, path, body) {
     return { claims: claimsPending(state), redemptions: redemptionsPending(state) };
   }
 
+  // La decisión del adulto es definitiva y define el pago:
+  // ✅ hecha correctamente 100% · 🟡 hecha a medias 25% · ❌ no realizada -50%.
   if (method === "POST" && (m = path.match(/^\/parent\/claims\/([^/]+)$/))) {
     const parent = requireParent(state);
     const claim = state.claims.find((c) => c.id === m[1]);
@@ -663,16 +685,41 @@ function handle(state, method, path, body) {
     let message;
     if (body.decision === "approve") {
       claim.status = "approved";
+      claim.decision = "approve";
+      claim.awarded = quest ? quest.points : 0;
       claim.decided_at = nowISO();
       if (quest && kid) {
         addTxn(state, kid, quest.points, quest.title, "quest", parent.name);
         if (quest.repeat === "once") quest.completed_once = true;
       }
-      message = "¡Aprobada!" + (kid ? " " + kid.name + " ganó " + (quest ? quest.points : "") + " puntos." : "");
-    } else {
-      claim.status = "rejected";
+      message = "✅ Hecha correctamente: " + (kid ? kid.name : "el niño") +
+        " ganó " + (quest ? quest.points : 0) + " puntos (100%).";
+    } else if (body.decision === "partial") {
+      const awarded = quest ? round1(quest.points * 0.25) : 0;
+      claim.status = "approved";
+      claim.decision = "partial";
+      claim.awarded = awarded;
       claim.decided_at = nowISO();
-      message = "Rechazada — la quest vuelve a estar disponible para " + (kid ? kid.name : "el niño") + ".";
+      if (quest && kid) {
+        addTxn(state, kid, awarded, quest.title + " (hecha a medias)", "partial", parent.name);
+        if (quest.repeat === "once") quest.completed_once = true;
+      }
+      message = "🟡 Hecha a medias: " + (kid ? kid.name : "el niño") +
+        " ganó solo " + awarded + " puntos (25% de " + (quest ? quest.points : 0) + ").";
+    } else if (body.decision === "not_done") {
+      const penalty = quest ? round1(quest.points / 2) : 0;
+      claim.status = "missed";
+      claim.decision = "not_done";
+      claim.penalty = -penalty;
+      claim.decided_at = nowISO();
+      if (quest && kid) {
+        state.misses.push({ id: newId(state), quest_id: quest.id, kid_id: kid.id, period: claim.period, penalty, at: nowISO() });
+        addTxn(state, kid, -penalty, "'" + quest.title + "' no realizada (dijo que la hizo)", "missed", parent.name);
+      }
+      message = "❌ No realizada: se descontaron " + penalty + " puntos a " +
+        (kid ? kid.name : "el niño") + " (50%).";
+    } else {
+      throw new ApiError("Decisión no válida.");
     }
     return { claims: claimsPending(state), redemptions: redemptionsPending(state), message };
   }

@@ -25,7 +25,8 @@ from ..models import (REPEAT_CHOICES, STOCK_PERIODS, STOCK_SCOPES,
                       mark_quest_missed, oid, parse_subtasks, period_key,
                       pending_claims, pending_count, pending_redemptions,
                       quests_for_kid, recent_activity, redeem,
-                      redemptions_for, set_kid_goal, stock_label, stock_mode,
+                      redemptions_for, retract_quest_claim, set_kid_goal,
+                      stock_label, stock_mode,
                       toggle_subtask, verify_kid_pin, verify_parent)
 from ..notify import compose, notify, notify_many
 from .helpers import as_int, check_goal_reached, local_now
@@ -320,6 +321,27 @@ def kid_step(quest_id, subtask_id):
               steps_total=len(quest.get("subtasks") or []))
 
 
+@bp.post("/kid/quests/<quest_id>/retract")
+@require_role("kid")
+def kid_retract(quest_id):
+    """Take back a claim still waiting for review (mirrors kid.retract_quest).
+    The quest goes back to open; no points move and nothing is recorded."""
+    db = get_db()
+    kid = g.user
+    quest = get_quest(db, quest_id)
+    if not quest or not quest.get("active"):
+        return fail("Esa quest ya no está.", 404)
+    if quest.get("assigned_to") and kid["_id"] not in quest["assigned_to"]:
+        return fail("Esa quest no es tuya.", 403)
+    claim = retract_quest_claim(db, quest, kid, local_now())
+    if not claim:
+        return fail("Solo puedes retractarte mientras está pendiente de revisión.", 400)
+    kid = get_user(db, kid["_id"])
+    return ok(message="Quedó pendiente otra vez: hazla bien y vuelve a marcarla cuando estés listo.",
+              kid=kid_me(kid),
+              quests=[quest_for_kid(q) for q in quests_for_kid(db, kid, local_now())])
+
+
 @bp.get("/kid/shop")
 @require_role("kid")
 def kid_shop():
@@ -467,26 +489,45 @@ def parent_approvals():
 @bp.post("/parent/claims/<claim_id>")
 @require_role("parent")
 def parent_decide_claim(claim_id):
-    """Approve or reject a quest claim (mirrors parent.decide_claim_route)."""
+    """Resolve a claim — the grown-up's verdict is final (mirrors
+    parent.decide_claim_route):
+
+      "approve"  → hecha correctamente:   +100%
+      "partial"  → hecha a medias:        +25%
+      "not_done" → no realizada:          -50%
+    """
     db = get_db()
-    approve = (request.get_json(silent=True) or {}).get("decision") == "approve"
-    claim = decide_quest_claim(db, claim_id, approve, g.user)
+    decision = (request.get_json(silent=True) or {}).get("decision")
+    claim = decide_quest_claim(db, claim_id, decision, g.user)
     if not claim:
         return fail("Esa solicitud ya fue atendida.", 409)
-    if approve:
+    if decision == "approve":
         notify(db, claim["kid_id"], "quest_approved",
-               f"{claim['quest_emoji']} ¡{claim['quest_title']} aprobada!",
-               compose(f"Ganaste {claim['points']} puntos.",
-                       f"Aprobada por {g.user['name']}."))
+               f"{claim['quest_emoji']} ¡{claim['quest_title']} hecha correctamente!",
+               compose(f"Ganaste {claim['points']} puntos (100%).",
+                       f"Revisada por {g.user['name']}."))
         check_goal_reached(db, claim["kid_id"])
+        message = (f"{claim['kid_name']} ganó {claim['points']} puntos por "
+                   f"'{claim['quest_title']}'.")
+    elif decision == "partial":
+        notify(db, claim["kid_id"], "quest_approved",
+               f"{claim['quest_emoji']} {claim['quest_title']} hecha a medias",
+               compose(f"Ganaste {claim['awarded']} puntos "
+                       f"(25% de {claim['points']}).",
+                       f"Revisada por {g.user['name']}."))
+        check_goal_reached(db, claim["kid_id"])
+        message = (f"Hecha a medias: {claim['kid_name']} ganó "
+                   f"{claim['awarded']} puntos (25% de {claim['points']}) "
+                   f"por '{claim['quest_title']}'.")
     else:
         notify(db, claim["kid_id"], "quest_rejected",
-               f"{claim['quest_title']} fue devuelta",
-               "Inténtalo otra vez y márcala como hecha de nuevo.")
+               f"{claim['quest_title']} quedó como no realizada",
+               f"Se descontaron {abs(claim['penalty'])} puntos "
+               f"(50% de {claim['points']}).")
+        message = (f"No realizada: se descontaron {abs(claim['penalty'])} "
+                   f"puntos a {claim['kid_name']} por '{claim['quest_title']}'.")
     return ok(
-        message=(f"{claim['kid_name']} ganó {claim['points']} puntos por "
-                 f"'{claim['quest_title']}'." if approve
-                 else f"Devolvió '{claim['quest_title']}' a {claim['kid_name']}."),
+        message=message,
         claims=[claim_ser(c) for c in pending_claims(db)],
         redemptions=[redemption_ser(r) for r in pending_redemptions(db)],
     )

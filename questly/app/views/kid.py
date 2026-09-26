@@ -3,7 +3,7 @@ from flask import (Blueprint, flash, g, redirect, render_template, request,
 
 from ..db import get_db
 from ..models import (THEMES, annotate_rewards, claim_quest, get_quest,
-                      period_key, toggle_subtask,
+                      period_key, retract_quest_claim, toggle_subtask,
                       get_reward, goal_for, history_for, list_rewards,
                       quests_for_kid, redeem, redemptions_for, set_kid_goal,
                       set_kid_theme, theme_for)
@@ -108,6 +108,27 @@ def finish_quest(quest_id):
                 "Approve it in Questly to pay out.",
             ))
         session["celebrate"] = f"Nice one! {quest['points']} points on the way once it's checked."
+    return redirect(url_for("kid.home"))
+
+
+@bp.post("/quests/<quest_id>/retract")
+@kid_required
+def retract_quest(quest_id):
+    """Take back a claim that's still waiting for review. Nothing is paid or
+    taken and nothing is recorded — it's a correction, not a penalty. The quest
+    just goes back to open, and the child can mark it done again later."""
+    db = get_db()
+    quest = get_quest(db, quest_id)
+    if not quest:
+        flash("That quest has gone away.", "error")
+        return redirect(url_for("kid.home"))
+    claim = retract_quest_claim(db, quest, g.user, local_now())
+    if not claim:
+        flash("You can only take that back while it's waiting to be checked.",
+              "warn")
+    else:
+        flash("Taken back — it's open again. Mark it done when it's ready.",
+              "info")
     return redirect(url_for("kid.home"))
 
 

@@ -17,7 +17,7 @@ from bson import ObjectId
 
 from app.models import (claim_quest, create_kid, decide_quest_claim,
                         history_for, mark_quest_missed, period_key,
-                        quests_for_kid)
+                        quests_for_kid, retract_quest_claim)
 
 FAILS = []
 
@@ -85,7 +85,7 @@ check("hidden on an unselected day (Saturday)",
 print("\n--- custom_days claims ---")
 c1, err = claim_quest(db, bed, kid, MON)
 check("can claim on Monday", err is None, str(err))
-decide_quest_claim(db, c1["_id"], True, DAD)
+decide_quest_claim(db, c1["_id"], "approve", DAD)
 c2, err = claim_quest(db, bed, kid, TUE)
 check("completing Monday doesn't block Tuesday", err is None, str(err))
 _, err = claim_quest(db, bed, kid, TUE)
@@ -171,24 +171,75 @@ check("kid can't claim a missed quest in that period", err is not None)
 _, err = claim_quest(db, odd, kid, TUE)
 check("the next day it opens again", err is None, str(err))
 
-decided = decide_quest_claim(db, claim_row["_id"], True, DAD)
+decided = decide_quest_claim(db, claim_row["_id"], "approve", DAD)
 check("a missed claim is not approvable like a pending one", decided is None)
 check("trying to approve a missed claim changes nothing",
       balance(db, kid) == 77.5
       and db.quest_claims.find_one({"_id": claim_row["_id"]})["status"] == "missed")
 
-rejected = add_quest(db, title="Sent back", repeat="daily", points=10)
-c, err = claim_quest(db, rejected, kid, MON)
+halfway = add_quest(db, title="Halfway", repeat="daily", points=10)
+c, err = claim_quest(db, halfway, kid, MON)
 check("kid can still claim normally", err is None, str(err))
-decide_quest_claim(db, c["_id"], False, DAD)
-check("rejected still pays nothing", balance(db, kid) == 77.5)
-_, err = claim_quest(db, rejected, kid, MON)
-check("rejected frees the slot for another go", err is None, str(err))
+claim = decide_quest_claim(db, c["_id"], "partial", DAD)
+check("half-done pays exactly 25% (10 -> 2.5)",
+      claim and claim["awarded"] == 2.5)
+check("balance after a halfway verdict is 80", balance(db, kid) == 80)
+state = {q["_id"]: q for q in quests_for_kid(db, kid, MON)}
+check("a halfway verdict closes the quest for the day",
+      state[halfway["_id"]]["state"] == "done")
+_, err = claim_quest(db, halfway, kid, MON)
+check("kid can't claim a halfway-paid quest again", err is not None)
+
+lied = add_quest(db, title="Said it was done", repeat="daily", points=10)
+c, err = claim_quest(db, lied, kid, MON)
+claim = decide_quest_claim(db, c["_id"], "not_done", DAD)
+check("claimed-but-not-done costs 50% (10 -> -5)",
+      claim and claim["penalty"] == -5)
+check("balance after not_done is 75", balance(db, kid) == 75)
+state = {q["_id"]: q for q in quests_for_kid(db, kid, MON)}
+check("a not_done quest is closed (missed)",
+      state[lied["_id"]]["state"] == "missed")
+check("the grown-up's verdict can't be redone",
+      decide_quest_claim(db, c["_id"], "approve", DAD) is None)
+check("retracting after a verdict changes nothing",
+      retract_quest_claim(db, lied, kid, MON) is None
+      and balance(db, kid) == 75)
 
 approved = add_quest(db, title="Good job", repeat="daily", points=10)
 c, err = claim_quest(db, approved, kid, MON)
-decide_quest_claim(db, c["_id"], True, DAD)
-check("approved still pays out normally", balance(db, kid) == 87.5)
+decide_quest_claim(db, c["_id"], "approve", DAD)
+check("done properly still pays 100% (75 -> 85)", balance(db, kid) == 85)
+
+odd_verdict = add_quest(db, title="Bad verdict", repeat="daily", points=10)
+c, err = claim_quest(db, odd_verdict, kid, MON)
+check("an unknown verdict is refused",
+      decide_quest_claim(db, c["_id"], "reject", DAD) is None)
+check("a refused verdict leaves it pending and pays nothing",
+      balance(db, kid) == 85)
+claim = decide_quest_claim(db, c["_id"], "approve", DAD)
+check("it can then be approved normally (85 -> 95)",
+      claim is not None and balance(db, kid) == 95)
+
+print("\n--- kid retraction: 0%, back to open ---")
+takeback = add_quest(db, title="Take back", repeat="daily", points=10)
+c, err = claim_quest(db, takeback, kid, MON)
+check("claims before retracting", err is None, str(err))
+hist_before = len(history_for(db, kid["_id"], limit=100))
+claim = retract_quest_claim(db, takeback, kid, MON)
+check("a pending claim can be retracted", claim is not None)
+check("retraction pays and takes nothing", balance(db, kid) == 95)
+check("retraction writes no transaction",
+      len(history_for(db, kid["_id"], limit=100)) == hist_before)
+state = {q["_id"]: q for q in quests_for_kid(db, kid, MON)}
+check("a retracted quest is open again",
+      state[takeback["_id"]]["state"] == "open")
+again, err = claim_quest(db, takeback, kid, MON)
+check("kid can claim again after retracting", err is None, str(err))
+check("redoing it properly pays 100%",
+      decide_quest_claim(db, again["_id"], "approve", DAD)
+      and balance(db, kid) == 105)
+check("nothing pending means nothing to retract",
+      retract_quest_claim(db, takeback, kid, MON) is None)
 
 print("\n--- guards ---")
 bins = add_quest(db, title="Weekly chore", repeat="weekly")

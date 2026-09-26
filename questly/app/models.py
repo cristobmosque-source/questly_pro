@@ -770,29 +770,79 @@ def _quest_all_done(quest, limit):
     return f"You've done that {limit} times {per} — that's the lot!"
 
 
-def decide_quest_claim(db, claim_id, approve, actor):
+# The grown-up's verdict on a claim is final and sets the payout:
+# done properly (100%), done halfway/badly (25%), or not done at all (-50%).
+CLAIM_DECISIONS = ("approve", "partial", "not_done")
+
+
+def _fraction(points, share):
+    """`share` of a quest's value, kept as a fraction when it doesn't divide
+    (25% of 15 is 3.75, 50% of 15 is 7.5)."""
+    out = points * share
+    return int(out) if out == int(out) else out
+
+
+def decide_quest_claim(db, claim_id, decision, actor):
+    """Resolve a pending claim:
+
+      "approve"  — done properly:        +100% of the quest's points
+      "partial"  — done halfway/badly:   +25% of the quest's points
+      "not_done" — claimed but not done: -50% of the quest's points
+
+    "partial" still closes the quest for the period (the child did do it);
+    "not_done" closes it as missed. Once decided, no verdict can be redone."""
     _id = oid(claim_id)
-    if not _id:
+    if not _id or decision not in CLAIM_DECISIONS:
         return None
 
-    claim = db.quest_claims.find_one_and_update(
-        {"_id": _id, "status": "pending"},
-        {"$set": {
-            "status": "approved" if approve else "rejected",
-            "decided_at": now(),
-            "decided_by": actor.get("name"),
-        }},
-        return_document=True,
-    )
+    claim = db.quest_claims.find_one({"_id": _id, "status": "pending"})
     if not claim:
         return None
 
-    if approve:
-        adjust_points(
-            db, claim["kid_id"], claim["points"],
-            f"Quest: {claim['quest_title']}", actor, kind="quest",
-        )
+    points = claim["points"]
+    if decision == "approve":
+        awarded, status = points, "approved"
+    elif decision == "partial":
+        awarded, status = _fraction(points, 0.25), "approved"
+    else:
+        awarded, status = -_fraction(points, 0.5), "missed"
+
+    db.quest_claims.update_one({"_id": _id}, {"$set": {
+        "status": status,
+        "decision": decision,
+        "awarded": awarded,
+        "decided_at": now(),
+        "decided_by": actor.get("name"),
+    }})
+    claim.update({"status": status, "decision": decision, "awarded": awarded})
+
+    if decision == "approve":
+        adjust_points(db, claim["kid_id"], points,
+                      f"Quest: {claim['quest_title']}", actor, kind="quest")
+    elif decision == "partial":
+        adjust_points(db, claim["kid_id"], awarded,
+                      f"Quest: {claim['quest_title']} (partly done)",
+                      actor, kind="partial")
+    else:
+        db.quest_claims.update_one({"_id": _id}, {"$set": {"penalty": awarded}})
+        claim["penalty"] = awarded
+        adjust_points(db, claim["kid_id"], awarded,
+                      f"Claimed but not done: {claim['quest_title']}",
+                      actor, kind="missed")
     return claim
+
+
+def retract_quest_claim(db, quest, kid, local_now):
+    """A child takes back a claim that's still waiting for review — pressed
+    the button by accident, or wants to do it properly first. The slot frees
+    up again and nothing is paid, taken or recorded: it's a correction, not a
+    penalty, and it's only possible while the claim is still pending. Returns
+    the removed claim, or None when there's nothing pending to take back."""
+    key = period_key(quest.get("repeat", "daily"), local_now)
+    return db.quest_claims.find_one_and_delete({
+        "quest_id": quest["_id"], "kid_id": kid["_id"],
+        "period": key, "status": "pending",
+    })
 
 
 def mark_quest_missed(db, quest, kid, local_now, actor):
