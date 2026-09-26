@@ -23,6 +23,7 @@ export default function QuestForm({ initial, kids, onSubmit, submitting, submitL
     description: initial?.description || "",
     subtasks: (initial?.subtasks || []).map((s) => s.text).join("\n"),
     assigned_to: initial?.assigned_to || [],
+    due_date: initial?.due_date || "",
   }));
 
   const set = (key) => (value) => setForm((f) => ({ ...f, [key]: value }));
@@ -86,6 +87,14 @@ export default function QuestForm({ initial, kids, onSubmit, submitting, submitL
           {!form.repeat_days.length ? (
             <p className="text-xs text-rose-500">Elige al menos un día.</p>
           ) : null}
+        </div>
+      ) : null}
+
+      {form.repeat === "once" ? (
+        <div className="space-y-1.5">
+          <Label htmlFor="q-due">Fecha límite (opcional)</Label>
+          <Input id="q-due" type="date" value={form.due_date || ""}
+            onChange={(e) => set("due_date")(e.target.value)} />
         </div>
       ) : null}
 

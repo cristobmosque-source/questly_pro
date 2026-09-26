@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Gift, Star, Target } from "lucide-react";
+import confetti from "canvas-confetti";
 import { useToast } from "@/components/ui/use-toast";
 import { ErrorView, Loading } from "@/components/questly/ApiState";
 import QuestCard from "@/components/questly/QuestCard";
@@ -29,6 +30,7 @@ export default function KidHome() {
     try {
       const res = await api(`/kid/quests/${quest.id}/claim`, { method: "POST" });
       setData((d) => ({ ...d, kid: res.kid, quests: res.quests }));
+      confetti({ particleCount: 90, spread: 70, origin: { y: 0.7 }, colors: [kid.color || "#7c4dff", "#fbbf24", "#34d399"] });
       toast({ title: "🎉 " + res.message });
       notifyPointsChanged();
     } catch (e) {
@@ -54,6 +56,7 @@ export default function KidHome() {
   if (!data) return <Loading label="Buscando tus quests…" />;
 
   const { kid, quests, goal, goal_chosen, goal_reached, affordable, history } = data;
+  const kidColor = kid.color || "#7c4dff";
   const open = quests.filter((q) => q.state === "open");
   const waiting = quests.filter((q) => q.state === "pending");
   const done = quests.filter((q) => q.state === "done");
@@ -61,7 +64,8 @@ export default function KidHome() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl bg-gradient-to-r from-violet-600 to-sky-500 text-white p-5 shadow-md">
+      <div className="rounded-3xl text-white p-5 shadow-md"
+        style={{ background: `linear-gradient(120deg, ${kidColor} 0%, ${kidColor}cc 55%, #f59e0bcc 130%)` }}>
         <p className="text-sm opacity-90">{kidGreeting()},</p>
         <h1 className="text-3xl font-extrabold">{kid.name} {kid.avatar}</h1>
         <div className="mt-3 flex items-end gap-2">

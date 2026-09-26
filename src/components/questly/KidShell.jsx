@@ -10,12 +10,13 @@ const NAV = [
   { to: "/kid/history", label: "Historial", icon: History },
 ];
 
-// Layout para el niño: cabecera amigable con puntos en vivo y navegación
+// Layout del niño: cabecera con su color propio, puntos en vivo y navegación
 // grande abajo (cómoda en móvil y tablet).
 export default function KidShell() {
   const user = getSessionUser();
   const navigate = useNavigate();
   const [points, setPoints] = useState(user?.points ?? 0);
+  const color = user?.color || "#7c4dff";
 
   useEffect(() => {
     let alive = true;
@@ -36,18 +37,17 @@ export default function KidShell() {
   if (!user || user.role !== "kid") return <Navigate to="/" replace />;
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-violet-50 via-sky-50 to-emerald-50">
+    <div className="min-h-screen"
+      style={{ background: `linear-gradient(180deg, ${color}1f 0%, #f8fafc 300px)` }}>
       <header className="px-4 pt-5 pb-3 max-w-3xl mx-auto flex items-center gap-3">
         <div className="flex items-center gap-3 min-w-0">
-          <span
-            className="h-14 w-14 shrink-0 rounded-full grid place-items-center text-3xl shadow-inner"
-            style={{ backgroundColor: (user.color || "#7c4dff") + "33" }}
-          >
+          <span className="h-14 w-14 shrink-0 rounded-full grid place-items-center text-3xl shadow-inner"
+            style={{ backgroundColor: color + "33" }}>
             {user.avatar || "🦊"}
           </span>
           <div className="min-w-0">
             <p className="text-lg font-bold truncate">{user.name}</p>
-            <p className="text-xs text-muted-foreground">Modo niño</p>
+            <p className="text-xs text-muted-foreground">¡A por esas quests!</p>
           </div>
         </div>
         <div className="ml-auto flex items-center gap-2">
@@ -77,13 +77,14 @@ export default function KidShell() {
               end={end}
               className={({ isActive }) =>
                 cn("flex flex-col items-center gap-0.5 py-3 text-xs font-semibold",
-                  isActive ? "text-violet-700" : "text-slate-400")
+                  isActive ? "" : "text-slate-400")
               }
+              style={({ isActive }) => (isActive ? { color } : undefined)}
             >
               {({ isActive }) => (
                 <>
-                  <span className={cn("rounded-2xl px-5 py-1.5 transition-colors",
-                    isActive ? "bg-violet-100" : "")}>
+                  <span className="rounded-2xl px-5 py-1.5 transition-colors"
+                    style={isActive ? { backgroundColor: color + "1f" } : undefined}>
                     <Icon className="h-6 w-6" />
                   </span>
                   {label}

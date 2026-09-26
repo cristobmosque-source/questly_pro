@@ -107,7 +107,8 @@ export default function ParentQuests() {
               <div className="flex-1 min-w-0">
                 <p className="font-bold">{q.title} <span className="text-amber-600 font-extrabold text-sm">⭐ {q.points}</span></p>
                 <p className="text-xs text-muted-foreground">
-                  {repeatLabel(q)} · {q.times_per_period > 1 ? `${q.times_per_period} veces/período · ` : ""}
+                  {repeatLabel(q)} · {q.repeat === "once" && q.due_date ? `Fecha: ${q.due_date} · ` : ""}
+                  {q.times_per_period > 1 ? `${q.times_per_period} veces/período · ` : ""}
                   {q.subtasks.length ? `${q.subtasks.length} subtareas · ` : ""}
                   {kidNames(q)}
                 </p>

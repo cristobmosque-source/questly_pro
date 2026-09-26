@@ -5,11 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ErrorView, Loading } from "@/components/questly/ApiState";
-import { api, setSession } from "@/lib/questlyApi";
-import { cn } from "@/lib/utils";
+import { api, isDemoMode, setSession } from "@/lib/questlyApi";
 
-// Pantalla de entrada: ¿quién eres? Niños con avatar (y PIN si tienen),
-// adulto con correo y contraseña, o configuración inicial la primera vez.
+// Pantalla de entrada: ¿quién eres? Perfiles de niños (con PIN) y del adulto,
+// o configuración inicial la primera vez.
 export default function EntryScreen() {
   const navigate = useNavigate();
   const [boot, setBoot] = useState(null);
@@ -21,6 +20,7 @@ export default function EntryScreen() {
   const [parentForm, setParentForm] = useState({ email: "", password: "" });
   const [setupForm, setSetupForm] = useState({ name: "", email: "", password: "", confirm: "" });
   const [formError, setFormError] = useState("");
+  const demo = isDemoMode();
 
   const load = useCallback(async () => {
     setError(null);
@@ -101,6 +101,8 @@ export default function EntryScreen() {
   if (error) return <ErrorView error={error} onRetry={load} />;
   if (!boot) return <Loading label="Buscando a la familia…" />;
 
+  const kidColor = (kid) => kid.color || "#7c4dff";
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-violet-100 via-sky-50 to-emerald-50 flex flex-col">
       <div className="max-w-md w-full mx-auto px-5 py-10 flex-1">
@@ -145,31 +147,48 @@ export default function EntryScreen() {
             <div className="mt-6 grid grid-cols-3 gap-4">
               {boot.kids.map((kid) => (
                 <button key={kid.id} disabled={busy} onClick={() => tryKid(kid)}
-                  className="flex flex-col items-center gap-2 rounded-3xl bg-white border border-slate-100 shadow-sm p-4 hover:shadow-md transition-shadow active:scale-95">
+                  className="flex flex-col items-center gap-2 rounded-3xl bg-white border-2 shadow-sm p-4 hover:shadow-md transition-all active:scale-95"
+                  style={{ borderColor: kidColor(kid) + "55", backgroundColor: kidColor(kid) + "0d" }}>
                   <span className="h-16 w-16 rounded-full grid place-items-center text-4xl"
-                    style={{ backgroundColor: (kid.color || "#7c4dff") + "2e" }}>
+                    style={{ backgroundColor: kidColor(kid) + "2e" }}>
                     {kid.avatar || "🦊"}
                   </span>
                   <span className="text-sm font-bold truncate max-w-full">{kid.name}</span>
                 </button>
               ))}
-              {!boot.kids.length ? (
-                <p className="col-span-3 text-center text-sm text-muted-foreground py-4">
-                  Aún no hay niños — entra como adulto y agrégalos.
-                </p>
-              ) : null}
             </div>
-            <button onClick={() => { setView("parent"); setFormError(""); }}
-              className="mt-8 w-full flex items-center justify-center gap-2 rounded-2xl bg-white border border-slate-200 py-3 font-semibold text-slate-600 hover:bg-slate-50">
-              <LockKeyhole className="h-4 w-4" /> Soy adulto
+
+            <button onClick={() => { setView("parent"); setFormError(""); }} disabled={busy}
+              className="mt-5 w-full flex items-center gap-3 rounded-2xl bg-white border-2 border-slate-200 shadow-sm p-4 hover:shadow-md transition-all active:scale-95">
+              <span className="h-12 w-12 rounded-full grid place-items-center text-2xl bg-slate-100">
+                {boot.parent?.avatar || "👨"}
+              </span>
+              <span className="text-left min-w-0">
+                <span className="block font-bold truncate">{boot.parent?.name || "Adulto"}</span>
+                <span className="block text-xs text-muted-foreground flex items-center gap-1">
+                  <LockKeyhole className="h-3 w-3" /> Entrar con contraseña
+                </span>
+              </span>
             </button>
+
+            {!boot.kids.length ? (
+              <p className="mt-6 text-center text-sm text-muted-foreground">
+                Aún no hay niños — entra como adulto y agrégalos.
+              </p>
+            ) : null}
+
+            {demo ? (
+              <p className="mt-6 text-center text-xs text-muted-foreground">
+                Modo demo · Samuel PIN <code className="font-mono">1234</code> · Lorenza PIN <code className="font-mono">5678</code> · Adulto: <code className="font-mono">admin</code>
+              </p>
+            ) : null}
           </>
         ) : null}
 
         {view === "pin" && selectedKid ? (
           <div className="mt-10 flex flex-col items-center">
-            <span className="h-20 w-20 rounded-full grid place-items-center text-5xl"
-              style={{ backgroundColor: (selectedKid.color || "#7c4dff") + "2e" }}>
+            <span className="h-20 w-20 rounded-full grid place-items-center text-5xl shadow-inner"
+              style={{ backgroundColor: kidColor(selectedKid) + "2e" }}>
               {selectedKid.avatar}
             </span>
             <p className="mt-3 font-bold text-lg">Hola, {selectedKid.name}</p>
@@ -177,8 +196,8 @@ export default function EntryScreen() {
             {formError ? <p className="mt-2 text-sm text-rose-600">{formError}</p> : null}
             <div className="flex gap-2.5 mt-4">
               {Array.from({ length: 6 }).map((_, i) => (
-                <span key={i} className={cn("h-3.5 w-3.5 rounded-full",
-                  i < pin.length ? "bg-violet-600" : "bg-slate-200")} />
+                <span key={i} className="h-3.5 w-3.5 rounded-full transition-colors"
+                  style={{ backgroundColor: i < pin.length ? kidColor(selectedKid) : "#e2e8f0" }} />
               ))}
             </div>
             <div className="mt-6 grid grid-cols-3 gap-3 w-full max-w-xs">
@@ -194,7 +213,8 @@ export default function EntryScreen() {
                 <Delete className="h-5 w-5 text-slate-500" />
               </button>
               <button disabled={busy || pin.length < 4} onClick={submitPin}
-                className="rounded-2xl bg-violet-600 text-white py-4 text-xl font-bold shadow-sm active:scale-95 disabled:opacity-40">
+                className="rounded-2xl text-white py-4 text-xl font-bold shadow-sm active:scale-95 disabled:opacity-40"
+                style={{ backgroundColor: kidColor(selectedKid) }}>
                 ✓
               </button>
             </div>
@@ -203,15 +223,17 @@ export default function EntryScreen() {
 
         {view === "parent" ? (
           <form onSubmit={submitParent} className="mt-10 space-y-3 bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
-            <h2 className="font-bold text-lg">Entrar como adulto</h2>
+            <h2 className="font-bold text-lg">Entrar como {boot.parent?.name || "adulto"}</h2>
             {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
+            {!demo ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="p-email">Correo electrónico</Label>
+                <Input id="p-email" type="email" required value={parentForm.email}
+                  onChange={(e) => setParentForm({ ...parentForm, email: e.target.value })} />
+              </div>
+            ) : null}
             <div className="space-y-1.5">
-              <Label htmlFor="p-email">Correo electrónico</Label>
-              <Input id="p-email" type="email" required value={parentForm.email}
-                onChange={(e) => setParentForm({ ...parentForm, email: e.target.value })} />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="p-pass">Contraseña</Label>
+              <Label htmlFor="p-pass">Contraseña{demo ? " (demo: admin)" : ""}</Label>
               <Input id="p-pass" type="password" required value={parentForm.password}
                 onChange={(e) => setParentForm({ ...parentForm, password: e.target.value })} />
             </div>

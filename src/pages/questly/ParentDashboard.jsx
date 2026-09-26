@@ -74,7 +74,8 @@ export default function ParentDashboard() {
         {data.kids.map((kid) => {
           const form = awards[kid.id] || {};
           return (
-            <div key={kid.id} className="rounded-2xl bg-white border border-slate-100 shadow-sm p-5">
+            <div key={kid.id} className="rounded-2xl bg-white border border-slate-100 shadow-sm p-5 relative overflow-hidden">
+              <span className="absolute inset-y-0 left-0 w-1.5" style={{ backgroundColor: kid.color || "#7c4dff" }} />
               <div className="flex items-center gap-3">
                 <span className="h-12 w-12 rounded-full grid place-items-center text-2xl"
                   style={{ backgroundColor: (kid.color || "#7c4dff") + "2e" }}>

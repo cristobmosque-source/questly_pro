@@ -19,6 +19,8 @@ import ParentApprovals from '@/pages/questly/ParentApprovals';
 import ParentRewards from '@/pages/questly/ParentRewards';
 import ParentKids from '@/pages/questly/ParentKids';
 import ParentKidDetail from '@/pages/questly/ParentKidDetail';
+import ParentHistory from '@/pages/questly/ParentHistory';
+import ParentSettings from '@/pages/questly/ParentSettings';
 import KidShell from '@/components/questly/KidShell';
 import ParentShell from '@/components/questly/ParentShell';
 
@@ -63,6 +65,8 @@ const AuthenticatedApp = () => {
         <Route path="/parent/rewards" element={<ParentRewards />} />
         <Route path="/parent/kids" element={<ParentKids />} />
         <Route path="/parent/kids/:id" element={<ParentKidDetail />} />
+        <Route path="/parent/history" element={<ParentHistory />} />
+        <Route path="/parent/settings" element={<ParentSettings />} />
       </Route>
       <Route path="*" element={<PageNotFound />} />
     </Routes>
