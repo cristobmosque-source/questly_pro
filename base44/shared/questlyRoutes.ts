@@ -582,7 +582,12 @@ export async function handle(state, method, path, body, token) {
 
   if (method === "GET" && path === "/parent/approvals") {
     requireParent(state, token);
-    return { claims: claimsPending(state), redemptions: redemptionsPending(state), reviews: pendingReviews(state) };
+    return {
+      claims: claimsPending(state),
+      redemptions: redemptionsPending(state),
+      reviews: pendingReviews(state),
+      pin_pending: state.pin_requests.filter((r) => r.status === "pending").length,
+    };
   }
 
   if (method === "POST" && (m = path.match(/^\/parent\/claims\/([^/]+)$/))) {

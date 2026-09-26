@@ -19,7 +19,7 @@ import { loadState, persistState, importSnapshot } from "../../shared/questlySto
 // escritura: el comportamiento no cambia.
 let cache = null; // { state, ids, at } — state nunca se muta, solo se reemplaza
 let loading = null; // carga en vuelo, compartida entre peticiones simultáneas
-const CACHE_TTL_MS = 3000;
+const CACHE_TTL_MS = 10000;
 
 async function getState(base44) {
   if (cache && Date.now() - cache.at < CACHE_TTL_MS) {

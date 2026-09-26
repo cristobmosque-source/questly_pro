@@ -77,33 +77,46 @@ export async function loadState(base44) {
   const S = base44.asServiceRole.entities;
   const state = emptyState();
   const ids = { parent: null, streak_progress: {}, sessions: {} };
-  for (const parent of await S.QuestlyParent.list("-created_date", 10)) {
-    if (!state.parent) {
-      state.parent = toDomain(parent);
-      ids.parent = parent.id;
+  // Las lecturas van en paralelo: son colecciones independientes y la
+  // plataforma las tolera sin límite (verificado). Antes eran secuenciales y
+  // cada carga tardaba ~2 s.
+  const jobs = [];
+  jobs.push((async () => {
+    for (const parent of await S.QuestlyParent.list("-created_date", 10)) {
+      if (!state.parent) {
+        state.parent = toDomain(parent);
+        ids.parent = parent.id;
+      }
     }
-  }
+  })());
   for (const cfg of COLLECTIONS) {
-    state[cfg.key] = [];
-    ids[cfg.key] = {};
-    const recs = await S[cfg.entity].list("-created_date", cfg.limit);
-    for (const r of recs) {
-      state[cfg.key].push(toDomain(r));
-      ids[cfg.key][r.ref] = r.id;
+    jobs.push((async () => {
+      state[cfg.key] = [];
+      ids[cfg.key] = {};
+      const recs = await S[cfg.entity].list("-created_date", cfg.limit);
+      for (const r of recs) {
+        state[cfg.key].push(toDomain(r));
+        ids[cfg.key][r.ref] = r.id;
+      }
+    })());
+  }
+  jobs.push((async () => {
+    for (const r of await S.QuestlyStreakProgress.list("-created_date", 10000)) {
+      state.streak_progress[r.ref] = {
+        count: r.count, rounds: r.rounds, completed: !!r.completed,
+        last_day: r.last_day || null, awarded_at: r.awarded_at || null,
+        celebrated: r.celebrated === undefined ? true : !!r.celebrated,
+      };
+      ids.streak_progress[r.ref] = r.id;
     }
-  }
-  for (const r of await S.QuestlyStreakProgress.list("-created_date", 10000)) {
-    state.streak_progress[r.ref] = {
-      count: r.count, rounds: r.rounds, completed: !!r.completed,
-      last_day: r.last_day || null, awarded_at: r.awarded_at || null,
-      celebrated: r.celebrated === undefined ? true : !!r.celebrated,
-    };
-    ids.streak_progress[r.ref] = r.id;
-  }
-  for (const r of await S.QuestlySession.list("-created_date", 20000)) {
-    state.sessions[r.ref] = { user_id: r.user_id, role: r.role };
-    ids.sessions[r.ref] = r.id;
-  }
+  })());
+  jobs.push((async () => {
+    for (const r of await S.QuestlySession.list("-created_date", 20000)) {
+      state.sessions[r.ref] = { user_id: r.user_id, role: r.role };
+      ids.sessions[r.ref] = r.id;
+    }
+  })());
+  await Promise.all(jobs);
   return { state, ids };
 }
 

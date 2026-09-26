@@ -53,8 +53,12 @@ export function notifyPointsChanged(points) {
     detail: typeof points === "number" ? { points } : {},
   }));
 }
-export function notifyApprovalsChanged() {
-  window.dispatchEvent(new Event("questly:approvals"));
+// Igual que los puntos: si la operación ya trae el conteo fresco de
+// pendientes, se adjunta al evento para no pedirlo otra vez al servidor.
+export function notifyApprovalsChanged(pending) {
+  window.dispatchEvent(new CustomEvent("questly:approvals", {
+    detail: typeof pending === "number" ? { pending } : {},
+  }));
 }
 
 // ---------------------------------------------------------------------------

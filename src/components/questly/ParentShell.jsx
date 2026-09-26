@@ -27,7 +27,13 @@ export default function ParentShell() {
 
   useEffect(() => {
     let alive = true;
-    const refresh = async () => {
+    const refresh = async (evt) => {
+      // Si el evento trae el conteo fresco (p. ej. tras decidir una
+      // aprobación), se usa directo: cero peticiones extra al servidor.
+      if (evt && typeof evt.detail?.pending === "number") {
+        if (alive) setPending(evt.detail.pending);
+        return;
+      }
       try {
         const data = await api("/parent/badge");
         if (alive) setPending(data.pending);

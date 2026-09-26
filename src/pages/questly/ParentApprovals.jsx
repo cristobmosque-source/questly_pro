@@ -21,11 +21,18 @@ export default function ParentApprovals() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      setData(await api("/parent/approvals"));
+      const fresh = await api("/parent/approvals");
+      setData(fresh);
+      return fresh;
     } catch (e) {
       setError(e);
+      return null;
     }
   }, []);
+
+  // Total de pendientes para la insignia, sin pedir nada extra al servidor.
+  const pendingCount = (d, claims, redemptions) =>
+    claims.length + redemptions.length + (d.reviews || []).length + (d.pin_pending || 0);
 
   useEffect(() => { load(); }, [load]);
 
@@ -40,9 +47,9 @@ export default function ParentApprovals() {
         body: { decision: "not_applicable", comment },
       });
       toast({ title: res.message });
-      setData({ claims: res.claims, redemptions: res.redemptions, reviews: data.reviews });
+      setData({ claims: res.claims, redemptions: res.redemptions, reviews: data.reviews, pin_pending: data.pin_pending });
       setNaTarget(null);
-      notifyApprovalsChanged();
+      notifyApprovalsChanged(pendingCount(data, res.claims, res.redemptions));
       notifyPointsChanged();
     } catch (e) {
       toast({ title: "Ups", description: e.message, variant: "destructive" });
@@ -57,8 +64,8 @@ export default function ParentApprovals() {
       const path = kind === "claim" ? "/parent/claims/" : "/parent/redemptions/";
       const res = await api(path + item.id, { method: "POST", body: { decision } });
       toast({ title: res.message });
-      setData({ claims: res.claims, redemptions: res.redemptions, reviews: data.reviews });
-      notifyApprovalsChanged();
+      setData({ claims: res.claims, redemptions: res.redemptions, reviews: data.reviews, pin_pending: data.pin_pending });
+      notifyApprovalsChanged(pendingCount(data, res.claims, res.redemptions));
       notifyPointsChanged();
     } catch (e) {
       toast({ title: "Ups", description: e.message, variant: "destructive" });
@@ -79,8 +86,8 @@ export default function ParentApprovals() {
       });
       toast({ title: res.message });
       setReviewTarget(null);
-      await load();
-      notifyApprovalsChanged();
+      const fresh = await load();
+      if (fresh) notifyApprovalsChanged(pendingCount(fresh, fresh.claims, fresh.redemptions));
       notifyPointsChanged();
     } catch (e) {
       toast({ title: "Ups", description: e.message, variant: "destructive" });
