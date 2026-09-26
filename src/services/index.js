@@ -9,7 +9,7 @@ import { getToken } from "@/services/session";
 export { ApiError } from "@/services/error";
 export { getToken, getSessionUser, setSession, clearSession } from "@/services/session";
 
-const RATE_LIMIT_RE = /rate limit/i;
+const RATE_LIMIT_RE = /rate limit|too many requests|429/i;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // El servidor limita la frecuencia de peticiones (HTTP 429). Si ocurre,
