@@ -1,0 +1,52 @@
+{
+  "type": "object",
+  "properties": {
+    "ref": {
+      "type": "string"
+    },
+    "count": {
+      "type": "number"
+    },
+    "rounds": {
+      "type": "number"
+    },
+    "completed": {
+      "type": "boolean"
+    },
+    "last_day": {
+      "type": "string"
+    },
+    "awarded_at": {
+      "type": "string"
+    },
+    "celebrated": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "ref"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  },
+  "name": "QuestlyStreakProgress"
+}

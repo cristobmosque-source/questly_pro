@@ -1,0 +1,50 @@
+{
+  "type": "object",
+  "properties": {
+    "ref": {
+      "type": "string"
+    },
+    "quest_id": {
+      "type": "string"
+    },
+    "kid_id": {
+      "type": "string"
+    },
+    "period": {
+      "type": "string"
+    },
+    "subtask_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "ref",
+    "quest_id",
+    "kid_id",
+    "period",
+    "subtask_id"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  },
+  "name": "QuestlyStep"
+}

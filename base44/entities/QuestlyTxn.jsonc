@@ -1,0 +1,88 @@
+{
+  "type": "object",
+  "properties": {
+    "ref": {
+      "type": "string"
+    },
+    "kid_id": {
+      "type": "string"
+    },
+    "delta": {
+      "type": "number"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string"
+    },
+    "at": {
+      "type": "string"
+    },
+    "actor": {
+      "type": "string"
+    },
+    "balance_after": {
+      "type": "number"
+    },
+    "actor_name": {
+      "type": "string"
+    },
+    "actor_role": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string"
+    },
+    "origin": {
+      "type": "string"
+    },
+    "origin_name": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "reversed_at": {
+      "type": "string"
+    },
+    "reversed_by": {
+      "type": "string"
+    },
+    "reversal_of": {
+      "type": "string"
+    },
+    "reversal_txn_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "ref",
+    "kid_id",
+    "delta",
+    "reason"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  },
+  "name": "QuestlyTxn"
+}

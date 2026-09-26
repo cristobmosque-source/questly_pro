@@ -1,0 +1,89 @@
+{
+  "type": "object",
+  "properties": {
+    "ref": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "emoji": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "points": {
+      "type": "number"
+    },
+    "repeat": {
+      "type": "string"
+    },
+    "repeat_days": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      }
+    },
+    "times_per_period": {
+      "type": "number"
+    },
+    "assigned_to": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "subtasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "active": {
+      "type": "boolean"
+    },
+    "due_date": {
+      "type": "string"
+    },
+    "created_date": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "ref",
+    "title",
+    "points"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  },
+  "name": "QuestlyQuest"
+}

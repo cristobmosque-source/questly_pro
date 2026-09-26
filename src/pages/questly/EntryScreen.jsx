@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ErrorView, Loading } from "@/components/questly/ApiState";
+import LocalDataMigration, { hasLocalQuestlyData } from "@/components/questly/LocalDataMigration";
 import { api, setSession } from "@/lib/questlyApi";
 
 // Pantalla de entrada: ¿quién eres? Perfiles de niños (con PIN) y del adulto,
@@ -137,6 +138,10 @@ export default function EntryScreen() {
             </div>
             <Button type="submit" disabled={busy} className="w-full font-bold">Comenzar</Button>
           </form>
+        ) : null}
+
+        {view === "setup" && hasLocalQuestlyData() ? (
+          <LocalDataMigration onImported={load} />
         ) : null}
 
         {view === "who" ? (

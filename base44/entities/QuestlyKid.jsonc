@@ -1,0 +1,57 @@
+{
+  "type": "object",
+  "properties": {
+    "ref": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "avatar": {
+      "type": "string"
+    },
+    "color": {
+      "type": "string"
+    },
+    "pin": {
+      "type": "string"
+    },
+    "points": {
+      "type": "number"
+    },
+    "lifetime_points": {
+      "type": "number"
+    },
+    "goal_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "ref",
+    "name",
+    "points"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  },
+  "name": "QuestlyKid"
+}

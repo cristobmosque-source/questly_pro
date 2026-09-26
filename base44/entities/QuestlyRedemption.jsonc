@@ -1,0 +1,64 @@
+{
+  "type": "object",
+  "properties": {
+    "ref": {
+      "type": "string"
+    },
+    "reward_id": {
+      "type": "string"
+    },
+    "kid_id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "emoji": {
+      "type": "string"
+    },
+    "cost": {
+      "type": "number"
+    },
+    "status": {
+      "type": "string"
+    },
+    "at": {
+      "type": "string"
+    },
+    "decided_at": {
+      "type": "string"
+    },
+    "txn_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "ref",
+    "reward_id",
+    "kid_id",
+    "status"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  },
+  "name": "QuestlyRedemption"
+}

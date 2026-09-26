@@ -1,268 +1,55 @@
-// ALMACÉN DE DATOS DE QUESTLY — única fuente de datos de la aplicación.
-// Implementa las reglas de negocio de questly/app: instancias por fecha
-// (AYER/HOY) para quests diarias y custom_days, aprobación de claims
-// (✅ 100% · 🟡 25% · ❌ -50% · 🚫 No aplica 0 puntos), retractación,
-// "marcar como hecha" por el adulto (con origen niño/adulto), instancias
-// pasadas que se mantienen abiertas hasta que el adulto las resuelve (sin
-// penalización automática), stock de recompensas, metas de ahorro, rachas,
-// backups del reinicio de progreso y el flujo de PIN de los niños.
-// Zona horaria: America/Santiago.
+// RUTAS DE LA API DE QUESTLY (servidor) — mismo comportamiento que la
+// versión local. Autenticación propia de Questly: sesión por token, contraseña
+// del adulto y PIN de los niños (ambos hasheados con SHA-256).
 
-import { ApiError } from "@/services/error";
-import { getToken } from "@/services/session";
 import {
-  nowISO, round1, ymd, todayStr, yesterdayStr, mondayStr, dateLabel,
-  periodFor, isDateInstance, dueOn, assignedTo, periodLabel,
-  pubKid, newId, addTxn, kidTxns, kidQuests, dayItems, daySummary,
-  pubReward, goalFor, claimsPending, redemptionsPending, pendingReviews,
-  todayRows, yesterdayRows,
-  streaksForKid, collectCelebrations, applyStreaksOnDecision, breakDayStreaks,
-  pubStreak, validateStreak, removeStreak,
-  pruneBackups, listBackups, resetProgress, restoreBackup,
-  assignmentResult, assignmentState, buildOnceAssignments, syncOnceAssignments,
-  pubTxn, allTxns,
-} from "@/services/storeDomain";
-
-const KEY = "questly_store_v3";
-const LEGACY_KEY = "questly_demo_v2";
-const DELAY_MS = 90; // latencia simulada para que se vean los estados de carga
-
-// ---------------------------------------------------------------------------
-// estado y persistencia
-// ---------------------------------------------------------------------------
-
-function seedState() {
-  return {
-    seq: 100,
-    parent: { id: "p1", name: "Papá / CMB", avatar: "👨", password: "admin" },
-    // Los niños parten SIN PIN: cada uno crea el suyo desde su perfil.
-    kids: [
-      { id: "k1", name: "Samuel", avatar: "🐼", color: "#2563eb", pin: null, points: 8500, lifetime_points: 8500, goal_id: null },
-      { id: "k2", name: "Lorenza", avatar: "🦄", color: "#d946ef", pin: null, points: 6250, lifetime_points: 6750, goal_id: null },
-    ],
-    quests: [
-      { id: "q1", title: "Hacer la cama", emoji: "🛏️", description: "", points: 500, repeat: "daily", repeat_days: [], times_per_period: 1, assigned_to: ["k1", "k2"], subtasks: [], active: true, created_date: "2026-09-25" },
-      { id: "q2", title: "Ordenar habitación", emoji: "🧹", description: "", points: 1000, repeat: "custom_days", repeat_days: [0, 1, 2, 3, 4], times_per_period: 1, assigned_to: ["k1", "k2"], subtasks: [], active: true, created_date: "2026-09-25" },
-      { id: "q3", title: "Sacar la basura", emoji: "🗑️", description: "", points: 750, repeat: "custom_days", repeat_days: [1, 3], times_per_period: 1, assigned_to: ["k2"], subtasks: [], active: true, created_date: "2026-09-25" },
-      { id: "q4", title: "Ordenar el clóset", emoji: "🧺", description: "Toda la ropa en su lugar", points: 3000, repeat: "once", repeat_days: [], times_per_period: 1, assigned_to: ["k1"], subtasks: [], active: true, due_date: "2026-10-03", created_date: "2026-09-25" },
-      { id: "q5", title: "Limpiar el patio", emoji: "🌿", description: "", points: 2000, repeat: "custom_days", repeat_days: [5], times_per_period: 1, assigned_to: ["k1", "k2"], subtasks: [], active: true, created_date: "2026-09-25" },
-      { id: "q6", title: "Hacer ejercicio", emoji: "🏃", description: "15 minutos mínimo", points: 800, repeat: "custom_days", repeat_days: [0, 2, 4], times_per_period: 1, assigned_to: ["k1"], subtasks: [], active: true, created_date: "2026-09-25" },
-    ],
-    rewards: [
-      { id: "r1", title: "Helado", emoji: "🍦", cost: 500, description: "El sabor que quieras", stock_mode: "unlimited", stock: 0, stock_limit: 1, stock_period: "daily", stock_scope: "child", active: true },
-      { id: "r2", title: "Jugar videojuegos", emoji: "🎮", cost: 1000, description: "Una hora extra", stock_mode: "unlimited", stock: 0, stock_limit: 1, stock_period: "daily", stock_scope: "child", active: true },
-      { id: "r3", title: "Elegir película", emoji: "🎬", cost: 1500, description: "La película familiar la eliges tú", stock_mode: "unlimited", stock: 0, stock_limit: 1, stock_period: "daily", stock_scope: "child", active: true },
-      { id: "r4", title: "Salida al cine", emoji: "🎟️", cost: 10000, description: "Una entrada con palomitas", stock_mode: "unlimited", stock: 0, stock_limit: 1, stock_period: "daily", stock_scope: "child", active: true },
-    ],
-    // definiciones de rachas (el progreso vive en streak_progress, por niño)
-    streaks: [
-      { id: "s1", name: "Racha de la cama", quest_id: "q1", kid_id: null, type: "days", target: 7, reward_points: 500, repeatable: true, active: true },
-      { id: "s2", name: "Basura puntual", quest_id: "q3", kid_id: "k2", type: "times", target: 4, reward_points: 750, repeatable: false, active: true },
-    ],
-    streak_progress: {}, // "streakId|kidId" -> {count, rounds, completed, last_day, awarded_at, celebrated}
-    pin_requests: [],    // {id, kid_id, status: pending|approved|rejected, at, decided_at}
-    backups: [],         // copias creadas automáticamente antes de un reinicio
-    // ASIGNACIONES: ejecuciones de quests "una sola vez" — una por niño/fecha,
-    // todas apuntando al mismo quest_id (la definición nunca se duplica).
-    assignments: [
-      { id: "a90", quest_id: "q4", kid_id: "k1", due_date: "2026-10-03", created_at: "2026-09-25T10:00:00.000Z", created_by: "Papá / CMB" },
-    ],
-    // instancias por fecha (d:YYYY-MM-DD); semanal/mensual/once usan su propio bucket
-    claims: [
-      { id: "c1", quest_id: "q1", kid_id: "k1", period: "d:2026-09-24", date: "2026-09-24", status: "approved", completed_by: "kid", at: "2026-09-24T19:30:00.000Z", decided_at: "2026-09-24T19:35:00.000Z" },
-      { id: "c2", quest_id: "q1", kid_id: "k1", period: "d:2026-09-25", date: "2026-09-25", status: "approved", completed_by: "kid", at: "2026-09-25T08:10:00.000Z", decided_at: "2026-09-25T08:20:00.000Z" },
-      { id: "c3", quest_id: "q2", kid_id: "k1", period: "d:2026-09-25", date: "2026-09-25", status: "approved", completed_by: "kid", at: "2026-09-25T09:00:00.000Z", decided_at: "2026-09-25T09:10:00.000Z" },
-      { id: "c4", quest_id: "q1", kid_id: "k2", period: "d:2026-09-25", date: "2026-09-25", status: "approved", completed_by: "kid", at: "2026-09-25T08:05:00.000Z", decided_at: "2026-09-25T08:15:00.000Z" },
-      { id: "c5", quest_id: "q3", kid_id: "k2", period: "d:2026-09-24", date: "2026-09-24", status: "approved", completed_by: "kid", at: "2026-09-24T18:45:00.000Z", decided_at: "2026-09-24T18:50:00.000Z" },
-      { id: "c6", quest_id: "q6", kid_id: "k1", period: "d:2026-09-23", date: "2026-09-23", status: "not_applicable", decision: "not_applicable", completed_by: "parent", comment: "Estuvo de viaje con la abuela", at: "2026-09-23T21:00:00.000Z", decided_at: "2026-09-23T21:05:00.000Z" },
-    ],
-    // una penalización por instancia (quest_id + kid_id + period)
-    misses: [
-      { id: "m1", quest_id: "q2", kid_id: "k2", period: "d:2026-09-25", penalty: 500, at: "2026-09-25T09:15:00.000Z" },
-    ],
-    steps: [],         // {quest_id, kid_id, period, subtask_id}
-    txns: [
-      { id: "t1", kid_id: "k1", delta: 6500, reason: "Puntos de bienvenida", kind: "award", at: "2026-09-20T10:00:00.000Z", actor: "Papá / CMB", balance_after: 6500 },
-      { id: "t5", kid_id: "k2", delta: 5500, reason: "Puntos de bienvenida", kind: "award", at: "2026-09-20T10:05:00.000Z", actor: "Papá / CMB", balance_after: 5500 },
-      { id: "t6", kid_id: "k2", delta: 750, reason: "Sacar la basura", kind: "quest", at: "2026-09-24T18:50:00.000Z", actor: "Papá / CMB", balance_after: 6250, origin: "kid", origin_name: "Lorenza" },
-      { id: "t2", kid_id: "k1", delta: 500, reason: "Hacer la cama", kind: "quest", at: "2026-09-24T19:35:00.000Z", actor: "Papá / CMB", balance_after: 7000, origin: "kid", origin_name: "Samuel" },
-      { id: "t4", kid_id: "k2", delta: 500, reason: "Hacer la cama", kind: "quest", at: "2026-09-25T08:15:00.000Z", actor: "Papá / CMB", balance_after: 6750, origin: "kid", origin_name: "Lorenza" },
-      { id: "t3", kid_id: "k1", delta: 500, reason: "Hacer la cama", kind: "quest", at: "2026-09-25T08:20:00.000Z", actor: "Papá / CMB", balance_after: 7500, origin: "kid", origin_name: "Samuel" },
-      { id: "t8", kid_id: "k2", delta: -500, reason: "'Ordenar habitación' no realizada (vie 25 sept)", kind: "missed", at: "2026-09-25T09:15:00.000Z", actor: "Papá / CMB", balance_after: 6250, origin: "parent", origin_name: "Papá / CMB" },
-      { id: "t7", kid_id: "k1", delta: 1000, reason: "Ordenar habitación", kind: "quest", at: "2026-09-25T09:10:00.000Z", actor: "Papá / CMB", balance_after: 8500, origin: "kid", origin_name: "Samuel" },
-    ],
-    redemptions: [],  // {id, reward_id, kid_id, title, emoji, cost, status, at, decided_at}
-    sessions: {},     // token -> {user_id, role}
-  };
-}
-
-let cache = null;
-
-// Migraciones: mantiene funcionando datos guardados por versiones anteriores
-// y limpia las colecciones nuevas que falten.
-function migrate(state, fromLegacy) {
-  if (!state.streaks) state.streaks = [];
-  if (!state.streak_progress) state.streak_progress = {};
-  if (!state.backups) state.backups = [];
-  if (!state.pin_requests) state.pin_requests = [];
-  // modelo de asignaciones: cada quest "una sola vez" se ejecuta mediante
-  // asignaciones propias (período "a:<id>"); los claims/misses del modelo
-  // anterior (período "once") se reconvierten aquí.
-  if (!state.assignments) {
-    state.assignments = [];
-    buildOnceAssignments(state);
-  }
-  state.kids.forEach((k) => { if (k.pin === undefined) k.pin = null; });
-  // Las quests guardan desde cuándo existen: delimita qué instancias vencidas
-  // sin registro aparecen como "pendientes de revisión".
-  state.quests.forEach((q) => { if (!q.created_date) q.created_date = yesterdayStr(); });
-  if (fromLegacy) {
-    // Los PIN 1234/5678 venían del entorno de pruebas: los niños parten sin
-    // PIN y crean el suyo desde su perfil.
-    state.kids.forEach((k) => {
-      if (k.id === "k1" && k.pin === "1234") k.pin = null;
-      if (k.id === "k2" && k.pin === "5678") k.pin = null;
-    });
-    try { localStorage.removeItem(LEGACY_KEY); } catch { /* nada */ }
-  }
-  pruneBackups(state);
-}
-
-function load() {
-  if (cache) return cache;
-  let parsed = null;
-  let fromLegacy = false;
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (raw) {
-      parsed = JSON.parse(raw);
-    } else {
-      const legacy = localStorage.getItem(LEGACY_KEY);
-      if (legacy) { parsed = JSON.parse(legacy); fromLegacy = true; }
-    }
-  } catch {
-    parsed = null;
-  }
-  cache = parsed && parsed.txns ? parsed : seedState();
-  migrate(cache, fromLegacy);
-  save(cache);
-  return cache;
-}
-
-function save(state) {
-  cache = state;
-  try {
-    localStorage.setItem(KEY, JSON.stringify(state));
-  } catch { /* sin espacio: seguimos en memoria */ }
-}
-
-// Solo para pruebas internas: borra el almacén y vuelve al estado inicial.
-export function resetStore() {
-  cache = null;
-  try { localStorage.removeItem(KEY); localStorage.removeItem(LEGACY_KEY); } catch { /* nada */ }
-}
-
-// Solo para pruebas internas: modifica el almacén en crudo.
-export function _mutateStore(mut) {
-  const state = load();
-  mut(state);
-  save(state);
-}
-
-// (fechas, instancias, pendientes de revisión, rachas y backups viven en
-//  @/services/storeDomain; este archivo define rutas, sesión y persistencia)
+  ApiError, sha256Hex,
+  nowISO, todayStr, yesterdayStr, ymd, mondayStr, round1,
+  periodFor, isDateInstance, dueOn, dateLabel, periodLabel,
+  assignmentResult, assignmentState, buildOnceAssignments, syncOnceAssignments, assignedTo,
+  pubKid, newId, addTxn, kidTxns, pubTxn, allTxns,
+  kidQuests, dayItems, daySummary, pubReward, goalFor,
+  claimsPending, redemptionsPending, pendingReviews, todayRows, yesterdayRows,
+  applyStreaksOnDecision, breakDayStreaks, streaksForKid, collectCelebrations, pubStreak,
+  validateStreak, removeStreak, pruneBackups, listBackups, resetProgress, restoreBackup,
+  validateQuest, validateReward,
+} from "./questlyDomain.ts";
 
 // ---------------------------------------------------------------------------
 // sesión
 // ---------------------------------------------------------------------------
 
-function current(state) {
-  const token = getToken();
-  const s = state.sessions[token];
+function current(state, token) {
+  const s = (state.sessions || {})[token];
   if (!s) throw new ApiError("Tu sesión expiró. Entra de nuevo.", { status: 401 });
   return s;
 }
 
-function requireKid(state) {
-  const s = current(state);
+function requireKid(state, token) {
+  const s = current(state, token);
   if (s.role !== "kid") throw new ApiError("Esta sección es solo para niños.", { status: 403 });
   const kid = state.kids.find((k) => k.id === s.user_id);
   if (!kid) throw new ApiError("Tu perfil ya no existe.", { status: 401 });
   return kid;
 }
 
-function requireParent(state) {
-  const s = current(state);
+function requireParent(state, token) {
+  const s = current(state, token);
   if (s.role !== "parent") throw new ApiError("Esta sección es solo para adultos.", { status: 403 });
   return state.parent;
 }
 
 function login(state, user_id, role) {
-  const token = role + "-" + user_id + "-" + Math.random().toString(36).slice(2, 8);
+  const token = role + "-" + user_id + "-" + Math.random().toString(36).slice(2, 10);
   state.sessions[token] = { user_id, role };
   return token;
-}
-
-// ---------------------------------------------------------------------------
-// validaciones de quests y recompensas
-// ---------------------------------------------------------------------------
-
-const REPEATS = ["daily", "weekly", "once", "custom_days", "monthly"];
-
-function normalizeSubtasks(raw) {
-  const lines = Array.isArray(raw) ? raw : String(raw || "").split("\n");
-  return lines.map((l) => l.trim()).filter(Boolean).slice(0, 12)
-    .map((text, i) => ({ id: "st" + i, text }));
-}
-
-function validateQuest(state, body) {
-  const title = String(body.title || "").trim();
-  if (!title) throw new ApiError("Ponle un título a la quest.");
-  const points = Number(body.points);
-  if (!Number.isFinite(points) || points < 1 || points > 100000)
-    throw new ApiError("Los puntos deben estar entre 1 y 100000 (1000 puntos = $1.000).");
-  const repeat = REPEATS.includes(body.repeat) ? body.repeat : "daily";
-  let repeat_days = Array.isArray(body.repeat_days) ? body.repeat_days.filter((x) => x >= 0 && x <= 6) : [];
-  if (repeat === "custom_days" && !repeat_days.length)
-    throw new ApiError("Elige al menos un día para esta quest.");
-  const times_per_period = Math.min(20, Math.max(1, Number(body.times_per_period) || 1));
-  const assigned_to = (Array.isArray(body.assigned_to) ? body.assigned_to : [])
-    .filter((id) => state.kids.some((k) => k.id === id));
-  return {
-    title: title.slice(0, 80),
-    emoji: String(body.emoji || "").slice(0, 4),
-    description: String(body.description || "").slice(0, 240),
-    points, repeat, repeat_days: repeat === "custom_days" ? repeat_days.sort() : [],
-    times_per_period, assigned_to,
-    subtasks: normalizeSubtasks(body.subtasks),
-    due_date: repeat === "once" && body.due_date ? String(body.due_date).slice(0, 10) : null,
-  };
-}
-
-function validateReward(body) {
-  const title = String(body.title || "").trim();
-  if (!title) throw new ApiError("Ponle un nombre a la recompensa.");
-  const cost = Number(body.cost);
-  if (!Number.isFinite(cost) || cost < 1 || cost > 100000)
-    throw new ApiError("El costo debe estar entre 1 y 100000 puntos (1000 puntos = $1.000).");
-  const stock_mode = ["unlimited", "fixed", "periodic"].includes(body.stock_mode) ? body.stock_mode : "unlimited";
-  return {
-    title: title.slice(0, 80),
-    emoji: String(body.emoji || "🎁").slice(0, 4),
-    description: String(body.description || "").slice(0, 240),
-    cost, stock_mode,
-    stock: Math.max(0, Math.min(9999, Number(body.stock) || 0)),
-    stock_limit: Math.max(1, Math.min(999, Number(body.stock_limit) || 1)),
-    stock_period: ["daily", "weekly", "monthly"].includes(body.stock_period) ? body.stock_period : "daily",
-    stock_scope: body.stock_scope === "family" ? "family" : "child",
-  };
 }
 
 // ---------------------------------------------------------------------------
 // dispatcher de rutas
 // ---------------------------------------------------------------------------
 
-function handle(state, method, path, body) {
+export async function handle(state, method, path, body, token) {
   const tStr = todayStr();
   const yStr = yesterdayStr();
   let m;
@@ -277,37 +64,53 @@ function handle(state, method, path, body) {
     };
   }
 
-  if (method === "POST" && path === "/setup")
-    throw new ApiError("La familia ya está configurada. Entra con tu contraseña.");
+  // Primer arranque: crear la cuenta del adulto (solo si no existe ninguna).
+  if (method === "POST" && path === "/setup") {
+    if (state.parent) throw new ApiError("La familia ya está configurada. Entra con tu contraseña.");
+    const name = String(body.name || "").trim();
+    if (!name) throw new ApiError("Ponle tu nombre.");
+    const password = String(body.password || "");
+    if (password.length < 8) throw new ApiError("La contraseña debe tener al menos 8 caracteres.");
+    if (password !== String(body.confirm || "")) throw new ApiError("Las contraseñas no coinciden.");
+    state.parent = {
+      id: "p1", name: name.slice(0, 40),
+      avatar: String(body.avatar || "👨").slice(0, 4),
+      email: String(body.email || "").slice(0, 80),
+      password: await sha256Hex(password),
+    };
+    const t = login(state, state.parent.id, "parent");
+    return { token: t, user: { id: state.parent.id, role: "parent", name: state.parent.name, avatar: state.parent.avatar } };
+  }
 
   if (method === "POST" && path === "/auth/kid") {
     const kid = state.kids.find((k) => k.id === body.kid_id);
     if (!kid) throw new ApiError("Ese perfil ya no existe.", { status: 404 });
-    // Sin PIN configurado el niño entra directo; con PIN hay que acertarlo.
-    if (kid.pin && String(body.pin || "") !== kid.pin) throw new ApiError("PIN incorrecto. Inténtalo otra vez.");
-    const token = login(state, kid.id, "kid");
-    return { token, user: { id: kid.id, role: "kid", name: kid.name, avatar: kid.avatar, color: kid.color, points: kid.points } };
+    if (kid.pin && await sha256Hex(String(body.pin || "")) !== kid.pin)
+      throw new ApiError("PIN incorrecto. Inténtalo otra vez.");
+    const t = login(state, kid.id, "kid");
+    return { token: t, user: { id: kid.id, role: "kid", name: kid.name, avatar: kid.avatar, color: kid.color, points: kid.points } };
   }
 
   if (method === "POST" && path === "/auth/parent") {
-    if (String(body.password || "") !== state.parent.password)
+    if (!state.parent || await sha256Hex(String(body.password || "")) !== state.parent.password)
       throw new ApiError("Contraseña incorrecta.");
-    const token = login(state, state.parent.id, "parent");
-    return { token, user: { id: state.parent.id, role: "parent", name: state.parent.name, avatar: state.parent.avatar } };
+    const t = login(state, state.parent.id, "parent");
+    return { token: t, user: { id: state.parent.id, role: "parent", name: state.parent.name, avatar: state.parent.avatar } };
   }
 
   if (method === "GET" && path === "/me") {
-    const s = current(state);
+    const s = current(state, token);
     if (s.role === "kid") {
-      const kid = requireKid(state);
+      const kid = requireKid(state, token);
       return { user: { ...pubKid(kid), role: "kid" } };
     }
     return { user: { id: state.parent.id, role: "parent", name: state.parent.name, avatar: state.parent.avatar } };
   }
 
   // ----- niño --------------------------------------------------------------
+
   if (method === "GET" && path === "/kid/home") {
-    const kid = requireKid(state);
+    const kid = requireKid(state, token);
     const g = goalFor(state, kid);
     return {
       kid: pubKid(kid),
@@ -324,10 +127,9 @@ function handle(state, method, path, body) {
   }
 
   if (method === "POST" && (m = path.match(/^\/kid\/quests\/([^/]+)\/claim$/))) {
-    const kid = requireKid(state);
+    const kid = requireKid(state, token);
     const quest = state.quests.find((q) => q.id === m[1]);
     if (!quest || !quest.active) throw new ApiError("Esta quest ya no existe.");
-    // quests "una sola vez": la instancia es una ASIGNACIÓN de la misma quest
     let period, assignment = null;
     if (quest.repeat === "once") {
       const own = state.assignments
@@ -362,11 +164,8 @@ function handle(state, method, path, body) {
     return { kid: pubKid(kid), quests: kidQuests(state, kid, tStr), message: "¡Listo! Ahora queda esperando que un adulto la revise." };
   }
 
-  // Retractación del niño: SOLO mientras la instancia está pendiente de
-  // revisión. Vuelve a "por hacer" sin sumar ni restar puntos, sin
-  // penalización, sin transacción y sin consumir el cupo del día.
   if (method === "POST" && (m = path.match(/^\/kid\/quests\/([^/]+)\/retract$/))) {
-    const kid = requireKid(state);
+    const kid = requireKid(state, token);
     const quest = state.quests.find((q) => q.id === m[1]);
     if (!quest) throw new ApiError("Esta quest ya no existe.", { status: 404 });
     let period;
@@ -390,7 +189,7 @@ function handle(state, method, path, body) {
   }
 
   if (method === "POST" && (m = path.match(/^\/kid\/quests\/([^/]+)\/step\/([^/]+)$/))) {
-    const kid = requireKid(state);
+    const kid = requireKid(state, token);
     const quest = state.quests.find((q) => q.id === m[1]);
     if (!quest) throw new ApiError("Esta quest ya no existe.");
     const step = quest.subtasks.find((s) => s.id === m[2]);
@@ -405,24 +204,24 @@ function handle(state, method, path, body) {
     }
     const key = (t) => t.quest_id === quest.id && t.kid_id === kid.id && t.period === period && t.subtask_id === step.id;
     if (state.steps.some(key)) state.steps = state.steps.filter((t) => !key(t));
-    else state.steps.push({ quest_id: quest.id, kid_id: kid.id, period, subtask_id: step.id });
+    else state.steps.push({ id: quest.id + "|" + kid.id + "|" + period + "|" + step.id, quest_id: quest.id, kid_id: kid.id, period, subtask_id: step.id });
     return { ok: true };
   }
 
-  // ----- PIN del niño (crear el suyo / solicitar restablecimiento) ----------
+  // ----- PIN del niño ------------------------------------------------------
 
   if (method === "POST" && path === "/kid/pin") {
-    const kid = requireKid(state);
+    const kid = requireKid(state, token);
     if (kid.pin) throw new ApiError("Ya tienes un PIN. Si lo olvidaste, pide restablecerlo desde aquí.");
     const pin = String(body.pin || "").trim();
     if (!/^\d{4,6}$/.test(pin)) throw new ApiError("El PIN debe tener entre 4 y 6 dígitos.");
     if (pin !== String(body.confirm || "").trim()) throw new ApiError("Los PIN no coinciden. Inténtalo otra vez.");
-    kid.pin = pin;
+    kid.pin = await sha256Hex(pin);
     return { message: "¡PIN creado! La próxima vez lo usarás para entrar." };
   }
 
   if (method === "POST" && path === "/kid/pin/forgot") {
-    const kid = requireKid(state);
+    const kid = requireKid(state, token);
     const existing = state.pin_requests.find((r) => r.kid_id === kid.id && r.status === "pending");
     if (existing) return { message: "Ya hay una solicitud en camino. Un adulto la revisará pronto." };
     state.pin_requests.push({ id: newId(state), kid_id: kid.id, status: "pending", at: nowISO() });
@@ -430,7 +229,7 @@ function handle(state, method, path, body) {
   }
 
   if (method === "GET" && path === "/kid/profile") {
-    const kid = requireKid(state);
+    const kid = requireKid(state, token);
     const reqs = state.pin_requests
       .filter((r) => r.kid_id === kid.id)
       .sort((a, b) => (a.at < b.at ? 1 : -1));
@@ -441,7 +240,7 @@ function handle(state, method, path, body) {
   }
 
   if (method === "GET" && path === "/kid/shop") {
-    const kid = requireKid(state);
+    const kid = requireKid(state, token);
     return {
       kid: pubKid(kid),
       rewards: state.rewards.filter((r) => r.active).map(pubReward),
@@ -452,7 +251,7 @@ function handle(state, method, path, body) {
   }
 
   if (method === "POST" && (m = path.match(/^\/kid\/shop\/([^/]+)\/buy$/))) {
-    const kid = requireKid(state);
+    const kid = requireKid(state, token);
     const reward = state.rewards.find((r) => r.id === m[1]);
     if (!reward || !reward.active) throw new ApiError("Esta recompensa ya no está disponible.");
     if (reward.stock_mode === "fixed" && reward.stock <= 0) throw new ApiError("Se agotó. ¡Qué popular!");
@@ -478,23 +277,22 @@ function handle(state, method, path, body) {
     if (reward.stock_mode === "fixed") reward.stock -= 1;
     const t = addTxn(state, kid, -reward.cost, "Canje: " + reward.title, "redeem", kid.name,
       { actor_name: kid.name, actor_role: "kid", source: "redeem" });
-    const redemption = {
+    state.redemptions.push({
       id: newId(state), reward_id: reward.id, kid_id: kid.id,
       title: reward.title, emoji: reward.emoji, cost: reward.cost,
       status: "pending", at: nowISO(), txn_id: t.id,
-    };
-    state.redemptions.push(redemption);
+    });
     return { message: "¡Canjeada! Un adulto te la entregará pronto." };
   }
 
   if (method === "POST" && path === "/kid/goal/clear") {
-    const kid = requireKid(state);
+    const kid = requireKid(state, token);
     kid.goal_id = null;
     return { message: "Meta quitada." };
   }
 
   if (method === "POST" && (m = path.match(/^\/kid\/goal\/([^/]+)$/))) {
-    const kid = requireKid(state);
+    const kid = requireKid(state, token);
     const reward = state.rewards.find((r) => r.id === m[1] && r.active);
     if (!reward) throw new ApiError("Esa recompensa ya no existe.");
     kid.goal_id = reward.id;
@@ -502,7 +300,7 @@ function handle(state, method, path, body) {
   }
 
   if (method === "GET" && path === "/kid/history") {
-    const kid = requireKid(state);
+    const kid = requireKid(state, token);
     return {
       kid: pubKid(kid),
       history: kidTxns(state, kid.id),
@@ -515,13 +313,13 @@ function handle(state, method, path, body) {
   // ----- adulto ------------------------------------------------------------
 
   if (method === "GET" && path === "/parent/badge") {
-    requireParent(state);
+    requireParent(state, token);
     const pinPending = state.pin_requests.filter((r) => r.status === "pending").length;
     return { pending: claimsPending(state).length + redemptionsPending(state).length + pendingReviews(state).length + pinPending };
   }
 
   if (method === "GET" && path === "/parent/dashboard") {
-    requireParent(state);
+    requireParent(state, token);
     const activity = state.txns
       .slice().sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 200)
       .map((t) => pubTxn(state, t));
@@ -545,7 +343,7 @@ function handle(state, method, path, body) {
   }
 
   if (method === "GET" && path === "/parent/today") {
-    requireParent(state);
+    requireParent(state, token);
     return {
       today_date: tStr,
       yesterday_date: yStr,
@@ -555,7 +353,7 @@ function handle(state, method, path, body) {
   }
 
   if (method === "POST" && (m = path.match(/^\/parent\/quests\/([^/]+)\/missed\/([^/]+)$/))) {
-    const parent = requireParent(state);
+    const parent = requireParent(state, token);
     const quest = state.quests.find((q) => q.id === m[1]);
     const kid = state.kids.find((k) => k.id === m[2]);
     if (!quest || !kid) throw new ApiError("Esa quest o ese niño ya no existen.", { status: 404 });
@@ -576,7 +374,6 @@ function handle(state, method, path, body) {
       "missed", parent.name,
       { actor_name: parent.name, actor_role: "parent", source: "missed" });
     mt.origin = "parent"; mt.origin_name = parent.name;
-    // una instancia no realizada rompe las rachas de días consecutivos
     breakDayStreaks(state, kid, quest);
     return {
       rows: todayRows(state, tStr),
@@ -586,12 +383,8 @@ function handle(state, method, path, body) {
     };
   }
 
-  // ⚠️ Resolución de una instancia vencida SIN registro del niño
-  // ("Pendiente de revisión"): el adulto decide qué pasó — ✅ 100% · 🟡 25% ·
-  // ❌ -50% · 🚫 0 puntos — siempre con origen "padre". La penalización solo
-  // existe si el adulto la elige; las rachas no se mueven hasta la decisión.
   if (method === "POST" && (m = path.match(/^\/parent\/quests\/([^/]+)\/instances\/([^/]+)\/resolve$/))) {
-    const parent = requireParent(state);
+    const parent = requireParent(state, token);
     const quest = state.quests.find((q) => q.id === m[1]);
     const kid = state.kids.find((k) => k.id === m[2]);
     if (!quest || !kid) throw new ApiError("Esa quest o ese niño ya no existen.", { status: 404 });
@@ -605,7 +398,6 @@ function handle(state, method, path, body) {
         throw new ApiError("Esta quest no corresponde al " + dateLabel(dateStr) + ".");
       period = periodFor(quest, dateStr);
     } else if (quest.repeat === "once") {
-      // la instancia es una ASIGNACIÓN de la quest (período "a:<id>")
       const p = String(body.period || "");
       const a = p.startsWith("a:") ? state.assignments.find((x) => x.id === p.slice(2)) : null;
       if (!a || a.quest_id !== quest.id) throw new ApiError("Esa asignación ya no existe.", { status: 404 });
@@ -637,7 +429,7 @@ function handle(state, method, path, body) {
     if (state.misses.some((x) => x.quest_id === quest.id && x.kid_id === kid.id && x.period === period))
       throw new ApiError("Esta quest ya está marcada como no realizada en ese período.");
     const comment = String(body.comment || "").trim().slice(0, 140) || null;
-    const source = "pending_review"; // nadie la registró: la resuelve el adulto
+    const source = "pending_review";
     const periodTxt = dateStr ? dateLabel(dateStr) : "ese período";
     let message;
     if (result === "not_applicable") {
@@ -681,11 +473,8 @@ function handle(state, method, path, body) {
     return { message };
   }
 
-  // ♻️ Reasignar una quest "una sola vez": crea una NUEVA ASIGNACIÓN que
-  // apunta a la MISMA quest (mismo ID). La definición no se duplica, no hay
-  // límite de asignaciones y el historial de las anteriores queda intacto.
   if (method === "POST" && (m = path.match(/^\/parent\/quests\/([^/]+)\/reassign$/))) {
-    const parent = requireParent(state);
+    const parent = requireParent(state, token);
     const quest = state.quests.find((q) => q.id === m[1]);
     if (!quest) throw new ApiError("Esa quest ya no existe.", { status: 404 });
     if (quest.repeat !== "once")
@@ -706,22 +495,21 @@ function handle(state, method, path, body) {
   }
 
   if (method === "GET" && path === "/parent/quests") {
-    requireParent(state);
+    requireParent(state, token);
     return { quests: state.quests, kids: state.kids.map(pubKid) };
   }
 
   if (method === "POST" && path === "/parent/quests") {
-    requireParent(state);
+    requireParent(state, token);
     const data = validateQuest(state, body);
     const quest = { id: newId(state), active: true, created_date: tStr, ...data };
     state.quests.push(quest);
-    // una quest "una sola vez" nace con una ASIGNACIÓN por niño asignado
     if (quest.repeat === "once") syncOnceAssignments(state, quest, data);
     return { quests: state.quests, message: "Quest creada." };
   }
 
   if (method === "POST" && (m = path.match(/^\/parent\/quests\/([^/]+)$/))) {
-    requireParent(state);
+    requireParent(state, token);
     const quest = state.quests.find((q) => q.id === m[1]);
     if (!quest) throw new ApiError("Esa quest ya no existe.", { status: 404 });
     if (body.action === "toggle") {
@@ -734,22 +522,19 @@ function handle(state, method, path, body) {
       state.misses = state.misses.filter((x) => x.quest_id !== quest.id);
       state.steps = state.steps.filter((t) => t.quest_id !== quest.id);
       state.assignments = state.assignments.filter((a) => a.quest_id !== quest.id);
-      // las rachas ligadas a la quest desaparecen con ella (y su progreso)
       state.streaks.filter((s) => s.quest_id === quest.id).forEach(removeStreak.bind(null, state));
       return { quests: state.quests, message: "Quest eliminada." };
     }
     const data = validateQuest(state, body);
     Object.assign(quest, data);
-    // editar una quest "una sola vez" sincroniza sus asignaciones abiertas
     if (quest.repeat === "once") syncOnceAssignments(state, quest, data);
     return { quests: state.quests, message: "Quest actualizada." };
   }
 
-  // ----- historial de auditoría (adulto) --------------------------------------
-  // Libro completo de movimientos: beneficiario, actor, motivo y trazabilidad
-  // de reversiones. Solo el adulto puede deshacer (movimiento inverso).
+  // ----- historial de auditoría (adulto) -------------------------------------
+
   if (method === "GET" && path === "/parent/history") {
-    requireParent(state);
+    requireParent(state, token);
     return {
       kids: state.kids.map(pubKid),
       parent_name: state.parent.name,
@@ -757,13 +542,8 @@ function handle(state, method, path, body) {
     };
   }
 
-  // ↩️ Deshacer un movimiento: NO se borra ni se modifica el original — se
-  // crea una transacción INVERSA y ambos quedan enlazados
-  // (original.reversal_txn_id ↔ reversión.reversal_of). Un movimiento ya
-  // revertido no se puede revertir dos veces. Los canjes, además de los
-  // puntos, restauran la recompensa y su stock.
   if (method === "POST" && (m = path.match(/^\/parent\/txns\/([^/]+)\/reverse$/))) {
-    const parent = requireParent(state);
+    const parent = requireParent(state, token);
     const t = state.txns.find((x) => x.id === m[1]);
     if (!t) throw new ApiError("Ese movimiento ya no existe.", { status: 404 });
     if (t.reversal_of) throw new ApiError("Una reversión no se puede volver a revertir.");
@@ -801,15 +581,12 @@ function handle(state, method, path, body) {
   }
 
   if (method === "GET" && path === "/parent/approvals") {
-    requireParent(state);
+    requireParent(state, token);
     return { claims: claimsPending(state), redemptions: redemptionsPending(state), reviews: pendingReviews(state) };
   }
 
-  // La decisión del adulto es definitiva y define el pago:
-  // ✅ hecha correctamente 100% · 🟡 hecha a medias 25% · ❌ no realizada -50%
-  // · 🚫 no aplica 0 puntos (sin transacción y sin afectar rachas).
   if (method === "POST" && (m = path.match(/^\/parent\/claims\/([^/]+)$/))) {
-    const parent = requireParent(state);
+    const parent = requireParent(state, token);
     const claim = state.claims.find((c) => c.id === m[1]);
     if (!claim) throw new ApiError("Esa revisión ya no existe.", { status: 404 });
     if (claim.status !== "pending") throw new ApiError("Esta quest ya fue revisada.");
@@ -858,8 +635,6 @@ function handle(state, method, path, body) {
       message = "❌ No realizada: se descontaron " + penalty + " puntos a " +
         (kid ? kid.name : "el niño") + " (50%).";
     } else if (body.decision === "not_applicable") {
-      // 🚫 No aplica: cuarto resultado independiente — 0 puntos, sin
-      // penalización, sin transacción y sin afectar rachas.
       claim.status = "not_applicable";
       claim.decision = "not_applicable";
       claim.decided_at = nowISO();
@@ -870,8 +645,6 @@ function handle(state, method, path, body) {
     } else {
       throw new ApiError("Decisión no válida.");
     }
-    // Las rachas reaccionan a la decisión (solo el 100% suma; la no realizada
-    // rompe las de días consecutivos; a medias y no aplica no cuentan ni rompen).
     if (quest && kid) {
       const awards = applyStreaksOnDecision(state, kid, quest, body.decision, claim, parent.name);
       awards.forEach((s) => {
@@ -882,7 +655,7 @@ function handle(state, method, path, body) {
   }
 
   if (method === "POST" && (m = path.match(/^\/parent\/redemptions\/([^/]+)$/))) {
-    const parent = requireParent(state);
+    const parent = requireParent(state, token);
     const redemption = state.redemptions.find((r) => r.id === m[1]);
     if (!redemption) throw new ApiError("Ese canje ya no existe.", { status: 404 });
     if (redemption.status !== "pending") throw new ApiError("Este canje ya fue decidido.");
@@ -904,22 +677,22 @@ function handle(state, method, path, body) {
     return { claims: claimsPending(state), redemptions: redemptionsPending(state), message };
   }
 
-  // ----- rachas (adulto) ---------------------------------------------------
+  // ----- rachas (adulto) ----------------------------------------------------
 
   if (method === "GET" && path === "/parent/streaks") {
-    requireParent(state);
+    requireParent(state, token);
     return { streaks: state.streaks.map((s) => pubStreak(state, s)) };
   }
 
   if (method === "POST" && path === "/parent/streaks") {
-    requireParent(state);
+    requireParent(state, token);
     const data = validateStreak(state, body);
     state.streaks.push({ id: newId(state), active: body.active === undefined ? true : !!body.active, ...data });
     return { streaks: state.streaks.map((s) => pubStreak(state, s)), message: "Racha creada." };
   }
 
   if (method === "POST" && (m = path.match(/^\/parent\/streaks\/([^/]+)$/))) {
-    requireParent(state);
+    requireParent(state, token);
     const streak = state.streaks.find((s) => s.id === m[1]);
     if (!streak) throw new ApiError("Esa racha ya no existe.", { status: 404 });
     if (body.action === "toggle") {
@@ -934,27 +707,27 @@ function handle(state, method, path, body) {
     return { streaks: state.streaks.map((s) => pubStreak(state, s)), message: "Racha actualizada." };
   }
 
-  // ----- copias de seguridad y reinicio de progreso -------------------------
+  // ----- copias de seguridad y reinicio de progreso --------------------------
 
   if (method === "GET" && path === "/parent/backups") {
-    requireParent(state);
+    requireParent(state, token);
     return { backups: listBackups(state) };
   }
 
   if (method === "POST" && path === "/parent/progress/reset") {
-    requireParent(state);
+    requireParent(state, token);
     return resetProgress(state);
   }
 
   if (method === "POST" && (m = path.match(/^\/parent\/backups\/([^/]+)\/restore$/))) {
-    requireParent(state);
+    requireParent(state, token);
     return restoreBackup(state, m[1]);
   }
 
-  // ----- PIN (adulto): solicitudes de los niños ----------------------------
+  // ----- PIN (adulto): solicitudes de los niños -------------------------------
 
   if (method === "GET" && path === "/parent/pin-requests") {
-    requireParent(state);
+    requireParent(state, token);
     return {
       requests: state.pin_requests
         .filter((r) => r.status === "pending")
@@ -969,7 +742,7 @@ function handle(state, method, path, body) {
   }
 
   if (method === "POST" && (m = path.match(/^\/parent\/pin-requests\/([^/]+)$/))) {
-    requireParent(state);
+    requireParent(state, token);
     const req = state.pin_requests.find((r) => r.id === m[1]);
     if (!req) throw new ApiError("Esa solicitud ya no existe.", { status: 404 });
     if (req.status !== "pending") throw new ApiError("Esa solicitud ya fue revisada.");
@@ -979,14 +752,13 @@ function handle(state, method, path, body) {
       req.decided_at = nowISO();
       return { message: "Solicitud rechazada." };
     }
-    // aprobar: PIN nuevo opcional (vacío = dejar sin PIN por ahora)
     const pin = String(body.pin || "").trim();
     if (pin && !/^\d{4,6}$/.test(pin)) throw new ApiError("El PIN debe tener entre 4 y 6 dígitos.");
     req.status = "approved";
     req.decided_at = nowISO();
     let message = "Solicitud aprobada.";
     if (kid) {
-      kid.pin = pin || null;
+      kid.pin = pin ? await sha256Hex(pin) : null;
       message = pin
         ? "PIN restablecido para " + kid.name + "."
         : kid.name + " quedó sin PIN: podrá crear uno nuevo desde su perfil.";
@@ -1001,18 +773,18 @@ function handle(state, method, path, body) {
   }
 
   if (method === "GET" && path === "/parent/rewards") {
-    requireParent(state);
+    requireParent(state, token);
     return { rewards: state.rewards };
   }
 
   if (method === "POST" && path === "/parent/rewards") {
-    requireParent(state);
+    requireParent(state, token);
     state.rewards.push({ id: newId(state), active: true, ...validateReward(body) });
     return { rewards: state.rewards, message: "Recompensa creada." };
   }
 
   if (method === "POST" && (m = path.match(/^\/parent\/rewards\/([^/]+)$/))) {
-    requireParent(state);
+    requireParent(state, token);
     const reward = state.rewards.find((r) => r.id === m[1]);
     if (!reward) throw new ApiError("Esa recompensa ya no existe.", { status: 404 });
     if (body.action === "toggle") {
@@ -1029,12 +801,12 @@ function handle(state, method, path, body) {
   }
 
   if (method === "GET" && path === "/parent/kids") {
-    requireParent(state);
+    requireParent(state, token);
     return { kids: state.kids.map(pubKid), parents: [{ name: state.parent.name }] };
   }
 
   if (method === "POST" && path === "/parent/kids") {
-    requireParent(state);
+    requireParent(state, token);
     const name = String(body.name || "").trim();
     if (!name) throw new ApiError("Ponle un nombre.");
     const pin = String(body.pin || "").trim();
@@ -1044,14 +816,14 @@ function handle(state, method, path, body) {
       id: newId(state), name: name.slice(0, 40),
       avatar: String(body.avatar || "🦊").slice(0, 4),
       color: /^#[0-9a-fA-F]{6}$/.test(body.color || "") ? body.color : "#7c4dff",
-      pin: pin || null, points, lifetime_points: points, goal_id: null,
+      pin: pin ? await sha256Hex(pin) : null, points, lifetime_points: points, goal_id: null,
     };
     state.kids.push(kid);
     return { kids: state.kids.map(pubKid), message: "¡" + kid.name + " se unió a la familia!" };
   }
 
   if (method === "GET" && (m = path.match(/^\/parent\/kids\/([^/]+)$/))) {
-    requireParent(state);
+    requireParent(state, token);
     const kid = state.kids.find((k) => k.id === m[1]);
     if (!kid) throw new ApiError("Ese niño ya no existe.", { status: 404 });
     return {
@@ -1068,7 +840,7 @@ function handle(state, method, path, body) {
   }
 
   if (method === "POST" && (m = path.match(/^\/parent\/kids\/([^/]+)$/))) {
-    requireParent(state);
+    requireParent(state, token);
     const kid = state.kids.find((k) => k.id === m[1]);
     if (!kid) throw new ApiError("Ese niño ya no existe.", { status: 404 });
     if (body.action === "delete") {
@@ -1092,13 +864,13 @@ function handle(state, method, path, body) {
     if (body.action === "pin" || body.pin !== undefined) {
       const pin = String(body.pin || "").trim();
       if (pin && !/^\d{4,6}$/.test(pin)) throw new ApiError("El PIN debe tener entre 4 y 6 dígitos.");
-      kid.pin = pin || null;
+      kid.pin = pin ? await sha256Hex(pin) : null;
     }
     return { kids: state.kids.map(pubKid), message: "Datos actualizados." };
   }
 
   if (method === "POST" && path === "/parent/award") {
-    const parent = requireParent(state);
+    const parent = requireParent(state, token);
     const kid = state.kids.find((k) => k.id === body.kid_id);
     if (!kid) throw new ApiError("Ese niño ya no existe.", { status: 404 });
     const amount = Number(body.amount);
@@ -1115,16 +887,4 @@ function handle(state, method, path, body) {
   }
 
   throw new ApiError("Ruta no encontrada: " + method + " " + path, { status: 404 });
-}
-
-// ---------------------------------------------------------------------------
-// punto de entrada
-// ---------------------------------------------------------------------------
-
-export async function storeApi(path, { method = "GET", body } = {}) {
-  await new Promise((r) => setTimeout(r, DELAY_MS));
-  const state = load();
-  const result = handle(state, method, path, body || {});
-  save(state);
-  return result;
 }

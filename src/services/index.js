@@ -1,14 +1,33 @@
-// CAPA DE SERVICIOS DE QUESTLY — única fuente de datos de la aplicación.
-// Los componentes usan `api()` sin saber dónde viven los datos.
+// CAPA DE SERVICIOS DE QUESTLY — la única fuente de datos es la base de datos
+// real del servidor (función backend "questly"). El navegador solo conserva
+// el token de sesión (una credencial, no datos de la app).
 
-import { storeApi, resetStore } from "@/services/store";
+import { base44 } from "@/api/base44Client";
+import { ApiError } from "@/services/error";
+import { getToken } from "@/services/session";
 
 export { ApiError } from "@/services/error";
 export { getToken, getSessionUser, setSession, clearSession } from "@/services/session";
-export { resetStore };
 
-export async function api(path, opts) {
-  return storeApi(path, opts);
+export async function api(path, opts = {}) {
+  let res;
+  try {
+    res = await base44.functions.invoke("questly", {
+      path,
+      method: opts.method || "GET",
+      body: opts.body || {},
+      token: getToken(),
+    });
+  } catch {
+    throw new ApiError("No se pudo conectar con el servidor. Revisa tu conexión e inténtalo otra vez.", { status: 0, network: true });
+  }
+  const payload = res.data;
+  if (payload && payload.ok === false) {
+    throw new ApiError((payload.error && payload.error.message) || "Error inesperado", {
+      status: (payload.error && payload.error.status) || 500,
+    });
+  }
+  return payload.data;
 }
 
 // Avisan a los layouts que hay datos frescos (puntos, aprobaciones).

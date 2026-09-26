@@ -1,0 +1,60 @@
+{
+  "type": "object",
+  "properties": {
+    "ref": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "quest_id": {
+      "type": "string"
+    },
+    "kid_id": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string"
+    },
+    "target": {
+      "type": "number"
+    },
+    "reward_points": {
+      "type": "number"
+    },
+    "repeatable": {
+      "type": "boolean"
+    },
+    "active": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "ref",
+    "name",
+    "quest_id"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  },
+  "name": "QuestlyStreak"
+}

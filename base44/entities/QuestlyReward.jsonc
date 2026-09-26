@@ -1,0 +1,66 @@
+{
+  "type": "object",
+  "properties": {
+    "ref": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "emoji": {
+      "type": "string"
+    },
+    "cost": {
+      "type": "number"
+    },
+    "description": {
+      "type": "string"
+    },
+    "stock_mode": {
+      "type": "string"
+    },
+    "stock": {
+      "type": "number"
+    },
+    "stock_limit": {
+      "type": "number"
+    },
+    "stock_period": {
+      "type": "string"
+    },
+    "stock_scope": {
+      "type": "string"
+    },
+    "active": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "ref",
+    "title",
+    "cost"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  },
+  "name": "QuestlyReward"
+}

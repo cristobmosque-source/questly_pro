@@ -1,0 +1,58 @@
+{
+  "type": "object",
+  "properties": {
+    "ref": {
+      "type": "string"
+    },
+    "quest_id": {
+      "type": "string"
+    },
+    "kid_id": {
+      "type": "string"
+    },
+    "period": {
+      "type": "string"
+    },
+    "penalty": {
+      "type": "number"
+    },
+    "comment": {
+      "type": "string"
+    },
+    "source": {
+      "type": "string"
+    },
+    "at": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "ref",
+    "quest_id",
+    "kid_id",
+    "period"
+  ],
+  "rls": {
+    "read": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "create": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "update": {
+      "user_condition": {
+        "role": "admin"
+      }
+    },
+    "delete": {
+      "user_condition": {
+        "role": "admin"
+      }
+    }
+  },
+  "name": "QuestlyMiss"
+}
