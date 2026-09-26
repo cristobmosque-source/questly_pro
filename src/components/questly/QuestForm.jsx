@@ -7,7 +7,9 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import WeekdayPicker from "@/components/questly/WeekdayPicker";
+import EmojiField from "@/components/questly/EmojiField";
 import { REPEAT_OPTIONS } from "@/lib/questlyData";
+import { suggestEmoji, EMOJI_FALLBACK } from "@/lib/emojiAuto";
 import { cn } from "@/lib/utils";
 
 // Formulario compartido para crear y editar quests (los campos exactos que
@@ -25,8 +27,20 @@ export default function QuestForm({ initial, kids, onSubmit, submitting, submitL
     assigned_to: initial?.assigned_to || [],
     due_date: initial?.due_date || "",
   }));
+  // El emoji de una quest nueva se deduce del título; al editar una quest
+  // existente se respeta su emoji salvo que el adulto lo cambie a mano.
+  const [emojiMode, setEmojiMode] = useState(initial?.emoji ? "manual" : "auto");
 
   const set = (key) => (value) => setForm((f) => ({ ...f, [key]: value }));
+
+  // Mientras el emoji sea automático, sigue al título; si el adulto lo
+  // eligió a mano, editar el título ya no lo reemplaza.
+  const setTitle = (value) =>
+    setForm((f) => ({
+      ...f,
+      title: value,
+      ...(emojiMode === "auto" ? { emoji: suggestEmoji(value) } : {}),
+    }));
   const isAllKids = form.assigned_to.length === 0;
 
   const toggleKid = (id) => {
@@ -43,6 +57,7 @@ export default function QuestForm({ initial, kids, onSubmit, submitting, submitL
     onSubmit({
       ...form,
       title: form.title.trim(),
+      emoji: form.emoji || EMOJI_FALLBACK,
       points: Number(form.points) || 5,
       times_per_period: Number(form.times_per_period) || 1,
     });
@@ -54,12 +69,18 @@ export default function QuestForm({ initial, kids, onSubmit, submitting, submitL
         <div className="space-y-1.5">
           <Label htmlFor="q-title">Título</Label>
           <Input id="q-title" required maxLength={80} value={form.title}
-            onChange={(e) => set("title")(e.target.value)} placeholder="Hacer la cama" />
+            onChange={(e) => setTitle(e.target.value)} placeholder="Hacer la cama" />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="q-emoji">Emoji</Label>
-          <Input id="q-emoji" className="text-center text-lg" maxLength={4}
-            value={form.emoji} onChange={(e) => set("emoji")(e.target.value)} placeholder="⭐" />
+          <Label htmlFor="q-emoji">{emojiMode === "auto" ? "Emoji (auto)" : "Emoji"}</Label>
+          <div id="q-emoji">
+            <EmojiField
+              emoji={form.emoji || EMOJI_FALLBACK}
+              mode={emojiMode}
+              onPick={(e) => { setEmojiMode("manual"); set("emoji")(e); }}
+              onAuto={() => { setEmojiMode("auto"); set("emoji")(suggestEmoji(form.title)); }}
+            />
+          </div>
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="q-points">Puntos</Label>
