@@ -61,4 +61,5 @@ export const STATE_META = {
   pending: { label: "Por revisar", className: "bg-amber-100 text-amber-700" },
   done: { label: "¡Hecha!", className: "bg-violet-100 text-violet-700" },
   missed: { label: "No realizada", className: "bg-rose-100 text-rose-700" },
+  rejected: { label: "Rechazada", className: "bg-slate-200 text-slate-600" },
 };

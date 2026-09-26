@@ -44,15 +44,28 @@ export function notifyApprovalsChanged() {
 // formato compartido
 // ---------------------------------------------------------------------------
 
+// 1000 puntos = $1.000: la estrella sigue siendo el icono del sistema, pero
+// cada cifra de puntos puede mostrarse también como pesos chilenos.
 export function fmtPoints(value) {
   const n = Number(value || 0);
-  return Number.isInteger(n) ? String(n) : n.toLocaleString("es-CL");
+  return n.toLocaleString("es-CL", { maximumFractionDigits: 1 });
+}
+
+export function fmtMoney(value) {
+  return "$" + fmtPoints(value);
 }
 
 export function fmtSigned(delta) {
   const v = Number(delta || 0);
-  const abs = Number.isInteger(v) ? String(Math.abs(v)) : Math.abs(v).toLocaleString("es-CL");
-  return (v > 0 ? "+" : "-") + abs;
+  return (v > 0 ? "+" : "-") + fmtPoints(Math.abs(v));
+}
+
+export function fmtDateLabel(dateStr) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr + "T12:00:00Z");
+  if (isNaN(d.getTime())) return dateStr;
+  const s = d.toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" });
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 export function fmtWhen(iso) {

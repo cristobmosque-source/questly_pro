@@ -5,9 +5,11 @@ import confetti from "canvas-confetti";
 import { useToast } from "@/components/ui/use-toast";
 import { ErrorView, Loading } from "@/components/questly/ApiState";
 import QuestCard from "@/components/questly/QuestCard";
-import { api, fmtPoints, kidGreeting, notifyPointsChanged } from "@/lib/questlyApi";
+import DayQuestList from "@/components/questly/DayQuestList";
+import { api, fmtDateLabel, fmtMoney, fmtPoints, kidGreeting, notifyPointsChanged } from "@/lib/questlyApi";
 
-// Inicio del niño: saludo, puntos, meta de ahorro y sus quests de hoy.
+// Inicio del niño: saludo con puntos y su equivalente en pesos, resumen de
+// AYER (hechas / no realizadas) y quests de HOY.
 export default function KidHome() {
   const { toast } = useToast();
   const [data, setData] = useState(null);
@@ -30,7 +32,7 @@ export default function KidHome() {
     try {
       const res = await api(`/kid/quests/${quest.id}/claim`, { method: "POST" });
       setData((d) => ({ ...d, kid: res.kid, quests: res.quests }));
-      confetti({ particleCount: 90, spread: 70, origin: { y: 0.7 }, colors: [kid.color || "#7c4dff", "#fbbf24", "#34d399"] });
+      confetti({ particleCount: 90, spread: 70, origin: { y: 0.7 }, colors: [data.kid.color || "#7c4dff", "#fbbf24", "#34d399"] });
       toast({ title: "🎉 " + res.message });
       notifyPointsChanged();
     } catch (e) {
@@ -56,11 +58,25 @@ export default function KidHome() {
   if (!data) return <Loading label="Buscando tus quests…" />;
 
   const { kid, quests, goal, goal_chosen, goal_reached, affordable, history } = data;
+  const yesterday = data.yesterday || { date: data.yesterday_date, items: [] };
   const kidColor = kid.color || "#7c4dff";
-  const open = quests.filter((q) => q.state === "open");
+  const open = quests.filter((q) => q.state === "open" || q.state === "rejected");
   const waiting = quests.filter((q) => q.state === "pending");
   const done = quests.filter((q) => q.state === "done");
   const missed = quests.filter((q) => q.state === "missed");
+
+  const yDone = yesterday.items.filter((i) => i.state === "done");
+  const yPending = yesterday.items.filter((i) => i.state === "pending");
+  const yRejected = yesterday.items.filter((i) => i.state === "rejected");
+  const yMissed = yesterday.items.filter((i) => i.state === "missed");
+  const yTotal = yesterday.items.length;
+
+  const YesterdayGroup = ({ label, items, emoji }) => (
+    <div>
+      <p className="text-xs font-bold text-slate-500 mt-3 mb-1">{emoji} {label}</p>
+      <DayQuestList items={items} />
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -68,11 +84,78 @@ export default function KidHome() {
         style={{ background: `linear-gradient(120deg, ${kidColor} 0%, ${kidColor}cc 55%, #f59e0bcc 130%)` }}>
         <p className="text-sm opacity-90">{kidGreeting()},</p>
         <h1 className="text-3xl font-extrabold">{kid.name} {kid.avatar}</h1>
-        <div className="mt-3 flex items-end gap-2">
+        <div className="mt-3 flex items-end gap-2 flex-wrap">
           <span className="text-5xl font-black leading-none">⭐ {fmtPoints(kid.points)}</span>
           <span className="text-sm opacity-90 mb-1">puntos</span>
         </div>
+        <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3.5 py-1 text-sm font-bold">
+          💰 {fmtMoney(kid.points)}
+        </p>
       </div>
+
+      {yTotal ? (
+        <section className="rounded-3xl bg-white border border-slate-100 shadow-sm p-5">
+          <div className="flex items-baseline gap-2 flex-wrap">
+            <h2 className="font-extrabold text-lg">📅 Ayer</h2>
+            <span className="text-xs text-muted-foreground capitalize">{fmtDateLabel(yesterday.date)}</span>
+          </div>
+          {yDone.length ? <YesterdayGroup label="Hechas" emoji="✅" items={yDone} /> : null}
+          {yPending.length ? <YesterdayGroup label="Por revisar" emoji="⏳" items={yPending} /> : null}
+          {yRejected.length ? <YesterdayGroup label="Rechazadas" emoji="🚫" items={yRejected} /> : null}
+          {yMissed.length ? <YesterdayGroup label="No realizadas" emoji="❌" items={yMissed} /> : null}
+        </section>
+      ) : null}
+
+      <section>
+        <div className="flex items-baseline gap-2 flex-wrap mb-3">
+          <h2 className="font-extrabold text-lg">📅 Hoy</h2>
+          <span className="text-xs text-muted-foreground capitalize">{fmtDateLabel(data.today_date)}</span>
+        </div>
+
+        {open.length ? (
+          <p className="font-bold text-sm mb-3">🔥 Para hacer hoy</p>
+        ) : null}
+        <div className="space-y-4">
+          {open.map((q) => (
+            <QuestCard key={q.id} quest={q} onClaim={claim} onToggleStep={toggleStep} busy={busy} />
+          ))}
+        </div>
+
+        {waiting.length ? (
+          <p className="font-bold text-sm mt-5 mb-3">Esperando revisión ⏳</p>
+        ) : null}
+        <div className="space-y-4">
+          {waiting.map((q) => (
+            <QuestCard key={q.id} quest={q} onClaim={claim} onToggleStep={toggleStep} busy={busy} />
+          ))}
+        </div>
+
+        {done.length ? (
+          <p className="font-bold text-sm mt-5 mb-3">¡Hechas hoy! 🎉</p>
+        ) : null}
+        <div className="space-y-4">
+          {done.map((q) => (
+            <QuestCard key={q.id} quest={q} onClaim={claim} onToggleStep={toggleStep} busy={busy} />
+          ))}
+        </div>
+
+        {missed.length ? (
+          <p className="font-bold text-sm mt-5 mb-3">No realizadas</p>
+        ) : null}
+        <div className="space-y-4">
+          {missed.map((q) => (
+            <QuestCard key={q.id} quest={q} onClaim={claim} onToggleStep={toggleStep} busy={busy} />
+          ))}
+        </div>
+
+        {!quests.length ? (
+          <div className="rounded-3xl bg-white border border-slate-100 shadow-sm p-10 text-center">
+            <Star className="mx-auto h-10 w-10 text-amber-400" />
+            <p className="mt-2 font-bold">¡Nada pendiente por ahora!</p>
+            <p className="text-sm text-muted-foreground">Cuando un adulto te asigne una quest, aparecerá aquí.</p>
+          </div>
+        ) : null}
+      </section>
 
       {goal && !goal_reached ? (
         <div className="rounded-3xl bg-amber-50 border border-amber-200 p-4">
@@ -80,10 +163,10 @@ export default function KidHome() {
             <Target className="h-4 w-4" /> Tu meta
           </p>
           <p className="font-semibold text-amber-900 mt-1">
-            {goal.emoji} {goal.title} — {fmtPoints(goal.cost)} puntos
+            {goal.emoji} {goal.title} — ⭐ {fmtPoints(goal.cost)} puntos ({fmtMoney(goal.cost)})
           </p>
           <p className="text-xs text-amber-700">
-            Te faltan {fmtPoints(goal.cost - kid.points)} puntos
+            Te faltan ⭐ {fmtPoints(goal.cost - kid.points)} ({fmtMoney(goal.cost - kid.points)})
             {!goal_chosen ? " (meta automática: la más cercana)" : ""}
           </p>
         </div>
@@ -104,63 +187,11 @@ export default function KidHome() {
           <div className="mt-2 flex flex-wrap gap-2">
             {affordable.slice(0, 3).map((r) => (
               <span key={r.id} className="rounded-full bg-violet-50 border border-violet-100 px-3 py-1 text-sm font-semibold">
-                {r.emoji} {r.title} ({r.cost})
+                {r.emoji} {r.title} (⭐ {fmtPoints(r.cost)})
               </span>
             ))}
             <Link to="/kid/shop" className="text-sm font-semibold text-violet-700 underline self-center">Ver tienda</Link>
           </div>
-        </div>
-      ) : null}
-
-      {open.length ? (
-        <section>
-          <h2 className="font-extrabold text-lg mb-3">Para hoy</h2>
-          <div className="space-y-4">
-            {open.map((q) => (
-              <QuestCard key={q.id} quest={q} onClaim={claim} onToggleStep={toggleStep} busy={busy} />
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {waiting.length ? (
-        <section>
-          <h2 className="font-extrabold text-lg mb-3">Esperando revisión ⏳</h2>
-          <div className="space-y-4">
-            {waiting.map((q) => (
-              <QuestCard key={q.id} quest={q} onClaim={claim} onToggleStep={toggleStep} busy={busy} />
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {done.length ? (
-        <section>
-          <h2 className="font-extrabold text-lg mb-3">¡Hechas hoy! 🎉</h2>
-          <div className="space-y-4">
-            {done.map((q) => (
-              <QuestCard key={q.id} quest={q} onClaim={claim} onToggleStep={toggleStep} busy={busy} />
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {missed.length ? (
-        <section>
-          <h2 className="font-extrabold text-lg mb-3">No realizadas</h2>
-          <div className="space-y-4">
-            {missed.map((q) => (
-              <QuestCard key={q.id} quest={q} onClaim={claim} onToggleStep={toggleStep} busy={busy} />
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {!quests.length ? (
-        <div className="rounded-3xl bg-white border border-slate-100 shadow-sm p-10 text-center">
-          <Star className="mx-auto h-10 w-10 text-amber-400" />
-          <p className="mt-2 font-bold">¡Nada pendiente por ahora!</p>
-          <p className="text-sm text-muted-foreground">Cuando un adulto te asigne una quest, aparecerá aquí.</p>
         </div>
       ) : null}
 
@@ -172,8 +203,8 @@ export default function KidHome() {
         <ul className="divide-y divide-slate-100">
           {history.slice(0, 4).map((h) => (
             <li key={h.id} className="flex items-center gap-3 py-2.5">
-              <span className={"font-mono text-sm font-bold w-12 text-right " + (h.delta > 0 ? "text-emerald-600" : "text-rose-600")}>
-                {h.delta > 0 ? "+" : ""}{fmtPoints(h.delta)}
+              <span className={"font-mono text-sm font-bold w-24 text-right " + (h.delta > 0 ? "text-emerald-600" : "text-rose-600")}>
+                ⭐ {h.delta > 0 ? "+" : ""}{fmtPoints(h.delta)}
               </span>
               <span className="text-sm truncate flex-1">{h.reason}</span>
             </li>

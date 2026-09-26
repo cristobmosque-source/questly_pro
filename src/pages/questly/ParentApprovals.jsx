@@ -3,7 +3,7 @@ import { Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { ErrorView, Loading } from "@/components/questly/ApiState";
-import { api, fmtWhen, notifyApprovalsChanged, notifyPointsChanged } from "@/lib/questlyApi";
+import { api, fmtPoints, fmtWhen, notifyApprovalsChanged, notifyPointsChanged } from "@/lib/questlyApi";
 
 // Aprobaciones: quests completadas y recompensas canjeadas, una decisión
 // cada vez — la lógica (puntos, reembolsos, stock) vive en el backend.
@@ -70,7 +70,7 @@ export default function ParentApprovals() {
                 <span className="text-2xl">{c.emoji}</span>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm">
-                    {c.kid_name}: {c.title} <span className="text-emerald-600 font-bold">+{c.points}</span>
+                    {c.kid_name}: {c.title} <span className="text-emerald-600 font-bold">⭐ +{fmtPoints(c.points)}</span>
                   </p>
                   <p className="text-xs text-muted-foreground">{fmtWhen(c.at)}</p>
                 </div>
@@ -94,7 +94,7 @@ export default function ParentApprovals() {
                 <span className="text-2xl">{r.emoji}</span>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm">
-                    {r.kid_name}: {r.title} <span className="text-rose-500 font-bold">-{r.cost} pts</span>
+                    {r.kid_name}: {r.title} <span className="text-rose-500 font-bold">⭐ -{fmtPoints(r.cost)}</span>
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {fmtWhen(r.at)} — aprueba para marcarla como entregada; rechazar devuelve los puntos.

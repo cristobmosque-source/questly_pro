@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { ErrorView, Loading } from "@/components/questly/ApiState";
 import HistoryList from "@/components/questly/HistoryList";
-import { api, fmtPoints, fmtWhen } from "@/lib/questlyApi";
+import { api, fmtMoney, fmtPoints, fmtWhen } from "@/lib/questlyApi";
 
 // Historial del niño: puntos ganados, gastados y penalizaciones.
 export default function KidHistory() {
@@ -33,14 +33,17 @@ export default function KidHistory() {
         <div className="rounded-2xl bg-white border border-slate-100 shadow-sm p-4 text-center">
           <p className="text-xs font-semibold text-muted-foreground">Tengo</p>
           <p className="text-2xl font-extrabold text-amber-600">⭐ {fmtPoints(data.kid.points)}</p>
+          <p className="text-xs text-muted-foreground">{fmtMoney(data.kid.points)}</p>
         </div>
         <div className="rounded-2xl bg-white border border-slate-100 shadow-sm p-4 text-center">
           <p className="text-xs font-semibold text-muted-foreground">Ganados</p>
-          <p className="text-2xl font-extrabold text-emerald-600">+{fmtPoints(earned)}</p>
+          <p className="text-2xl font-extrabold text-emerald-600">⭐ +{fmtPoints(earned)}</p>
+          <p className="text-xs text-muted-foreground">{fmtMoney(earned)}</p>
         </div>
         <div className="rounded-2xl bg-white border border-slate-100 shadow-sm p-4 text-center">
           <p className="text-xs font-semibold text-muted-foreground">Gastados</p>
-          <p className="text-2xl font-extrabold text-rose-500">-{fmtPoints(spent)}</p>
+          <p className="text-2xl font-extrabold text-rose-500">⭐ -{fmtPoints(spent)}</p>
+          <p className="text-xs text-muted-foreground">{fmtMoney(spent)}</p>
         </div>
       </div>
 

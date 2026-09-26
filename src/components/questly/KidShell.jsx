@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Navigate, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { Gift, History, Home, LogOut } from "lucide-react";
-import { api, clearSession, fmtPoints, getSessionUser, notifyPointsChanged } from "@/lib/questlyApi";
+import { api, clearSession, fmtMoney, fmtPoints, getSessionUser, notifyPointsChanged } from "@/lib/questlyApi";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -53,6 +53,9 @@ export default function KidShell() {
         <div className="ml-auto flex items-center gap-2">
           <span className="rounded-full bg-amber-100 border border-amber-200 px-4 py-2 font-extrabold text-amber-700 text-sm">
             ⭐ {fmtPoints(points)}
+          </span>
+          <span className="hidden sm:inline-flex rounded-full bg-white border border-slate-200 px-3 py-2 font-bold text-slate-600 text-xs">
+            💰 {fmtMoney(points)}
           </span>
           <button
             className="h-9 w-9 grid place-items-center rounded-full bg-white border border-slate-200 text-slate-500"

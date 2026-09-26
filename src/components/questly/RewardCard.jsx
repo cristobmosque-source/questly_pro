@@ -1,7 +1,7 @@
 import { Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { fmtPoints } from "@/lib/questlyApi";
+import { fmtMoney, fmtPoints } from "@/lib/questlyApi";
 import { cn } from "@/lib/utils";
 
 // Tarjeta de recompensa para el niño, con costo y disponibilidad tal como
@@ -19,9 +19,9 @@ export default function RewardCard({ reward, points, isGoal, onBuy, onSetGoal, b
         </span>
         <div className="min-w-0 flex-1">
           <h3 className="font-bold leading-tight">{reward.title}</h3>
-          {reward.stock_text ? (
-            <p className="text-xs text-muted-foreground">{reward.stock_text}</p>
-          ) : null}
+          <p className="text-xs text-muted-foreground">
+            💰 {fmtMoney(reward.cost)}{reward.stock_text ? " · " + reward.stock_text : ""}
+          </p>
         </div>
         <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-200 px-2.5 py-0.5 text-sm font-extrabold text-amber-700">
           <Star className="h-3.5 w-3.5" /> {fmtPoints(reward.cost)}

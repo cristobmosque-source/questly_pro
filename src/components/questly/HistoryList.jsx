@@ -1,5 +1,5 @@
 import { KIND_LABELS } from "@/lib/questlyData";
-import { fmtSigned, fmtWhen } from "@/lib/questlyApi";
+import { fmtMoney, fmtSigned, fmtWhen } from "@/lib/questlyApi";
 
 export default function HistoryList({ entries = [] }) {
   if (!entries.length) {
@@ -11,9 +11,9 @@ export default function HistoryList({ entries = [] }) {
         const positive = Number(h.delta) > 0;
         return (
           <li key={h.id} className="flex items-center gap-3 py-3">
-            <span className="font-mono text-sm font-bold w-14 text-right shrink-0"
+            <span className="font-mono text-sm font-bold w-20 text-right shrink-0"
               style={{ color: positive ? "#059669" : "#e11d48" }}>
-              {fmtSigned(h.delta)}
+              ⭐ {fmtSigned(h.delta)}
             </span>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{h.reason}</p>
@@ -24,7 +24,7 @@ export default function HistoryList({ entries = [] }) {
               </p>
             </div>
             {h.balance_after !== null && h.balance_after !== undefined ? (
-              <span className="text-xs text-muted-foreground shrink-0">→ {h.balance_after}</span>
+              <span className="text-xs text-muted-foreground shrink-0">→ ⭐ {fmtMoney(h.balance_after)}</span>
             ) : null}
           </li>
         );

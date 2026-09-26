@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { ErrorView, Loading } from "@/components/questly/ApiState";
+import DayQuestList from "@/components/questly/DayQuestList";
 import HistoryList from "@/components/questly/HistoryList";
-import { api, fmtPoints, fmtWhen, notifyPointsChanged } from "@/lib/questlyApi";
+import { api, fmtDateLabel, fmtMoney, fmtPoints, fmtWhen, notifyPointsChanged } from "@/lib/questlyApi";
 
-const QUICK = [10, 25, 50, 100];
+const QUICK = [100, 500, 1000, 5000];
 
 // Detalle de un niño: puntos, dar/quitar y todo su historial.
 export default function ParentKidDetail() {
@@ -73,7 +74,7 @@ export default function ParentKidDetail() {
           <div>
             <h1 className="text-2xl font-extrabold">{kid.name}</h1>
             <p className="text-sm text-muted-foreground">
-              ⭐ {fmtPoints(kid.points)} puntos · total ganado {fmtPoints(kid.lifetime_points)}
+              ⭐ {fmtPoints(kid.points)} puntos · 💰 {fmtMoney(kid.points)} · total ganado {fmtPoints(kid.lifetime_points)}
             </p>
           </div>
         </div>
@@ -101,6 +102,20 @@ export default function ParentKidDetail() {
           </div>
         </div>
       </div>
+
+      {data.yesterday ? (
+        <section className="rounded-2xl bg-white border border-slate-100 shadow-sm p-5">
+          <h2 className="font-bold mb-1">📅 Ayer — <span className="font-normal text-muted-foreground capitalize">{fmtDateLabel(data.yesterday_date)}</span></h2>
+          <DayQuestList items={data.yesterday.items} />
+        </section>
+      ) : null}
+
+      {data.today ? (
+        <section className="rounded-2xl bg-white border border-slate-100 shadow-sm p-5">
+          <h2 className="font-bold mb-1">📅 Hoy — <span className="font-normal text-muted-foreground capitalize">{fmtDateLabel(data.today_date)}</span></h2>
+          <DayQuestList items={data.today.quests} />
+        </section>
+      ) : null}
 
       <section className="rounded-2xl bg-white border border-slate-100 shadow-sm p-5">
         <h2 className="font-bold mb-1">Historial de puntos</h2>

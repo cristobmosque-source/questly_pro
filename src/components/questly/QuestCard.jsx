@@ -2,6 +2,7 @@ import { Check, Clock, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import StateChip from "@/components/questly/StateChip";
+import { fmtPoints } from "@/lib/questlyApi";
 import { cn } from "@/lib/utils";
 
 // Tarjeta grande de quest para el niño: emoji, puntos, subtareas y acción.
@@ -19,7 +20,7 @@ export default function QuestCard({ quest, onClaim, onToggleStep, busy = false }
           <div className="flex items-start gap-2 flex-wrap">
             <h3 className="text-lg font-bold leading-tight">{quest.title}</h3>
             <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-200 px-2.5 py-0.5 text-sm font-extrabold text-amber-700">
-              <Star className="h-3.5 w-3.5" /> {quest.points}
+              <Star className="h-3.5 w-3.5" /> {fmtPoints(quest.points)}
             </span>
           </div>
           {quest.description ? (

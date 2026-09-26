@@ -6,13 +6,24 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { ErrorView, Loading } from "@/components/questly/ApiState";
 import HistoryList from "@/components/questly/HistoryList";
-import StateChip from "@/components/questly/StateChip";
-import { api, fmtPoints, notifyApprovalsChanged, notifyPointsChanged } from "@/lib/questlyApi";
-import { repeatLabel } from "@/lib/questlyData";
+import { api, fmtMoney, fmtPoints, notifyApprovalsChanged, notifyPointsChanged } from "@/lib/questlyApi";
 
-const QUICK = [10, 25, 50, 100];
+const QUICK = [100, 500, 1000, 5000];
 
-// Dashboard del adulto: estado de cada niño, pendientes de hoy y actividad.
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+function summaryParts(sum, keys) {
+  const parts = [];
+  if (sum.done) parts.push(`✅ ${plural(sum.done, "hecha", "hechas")}`);
+  if (sum.pending) parts.push(`⏳ ${plural(sum.pending, "por revisar", "por revisar")}`);
+  if (sum.rejected) parts.push(`🚫 ${plural(sum.rejected, "rechazada", "rechazadas")}`);
+  if (sum.missed) parts.push(`❌ ${plural(sum.missed, "no realizada", "no realizadas")}`);
+  if (keys.includes("open") && sum.open) parts.push(`👉 ${plural(sum.open, "por hacer", "por hacer")}`);
+  return parts;
+}
+
+// Dashboard del adulto: estado de cada niño con su resumen de AYER y HOY,
+// pendientes de aprobación y actividad.
 export default function ParentDashboard() {
   const { toast } = useToast();
   const [data, setData] = useState(null);
@@ -49,6 +60,7 @@ export default function ParentDashboard() {
       });
       toast({ title: res.message });
       setAward(kid.id, { amount: "", reason: "" });
+      notifyPointsChanged();
       await load();
     } catch (e) {
       toast({ title: "Ups", description: e.message, variant: "destructive" });
@@ -67,12 +79,14 @@ export default function ParentDashboard() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-extrabold">Panel de la familia</h1>
-        <Link to="/parent/today" className="text-sm font-semibold text-violet-700">Ver quests de hoy →</Link>
+        <Link to="/parent/today" className="text-sm font-semibold text-violet-700">Ver ayer y hoy →</Link>
       </div>
 
       <section className="grid gap-4 sm:grid-cols-2">
         {data.kids.map((kid) => {
           const form = awards[kid.id] || {};
+          const yesterday = summaryParts(kid.yesterday || {}, []);
+          const today = summaryParts(kid.today || {}, ["open"]);
           return (
             <div key={kid.id} className="rounded-2xl bg-white border border-slate-100 shadow-sm p-5 relative overflow-hidden">
               <span className="absolute inset-y-0 left-0 w-1.5" style={{ backgroundColor: kid.color || "#7c4dff" }} />
@@ -83,10 +97,24 @@ export default function ParentDashboard() {
                 </span>
                 <div>
                   <Link to={`/parent/kids/${kid.id}`} className="font-bold hover:underline">{kid.name}</Link>
-                  <p className="text-xs text-muted-foreground">⭐ {fmtPoints(kid.points)} · total ganado {fmtPoints(kid.lifetime_points)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    ⭐ {fmtPoints(kid.points)} · {fmtMoney(kid.points)} · total ganado {fmtPoints(kid.lifetime_points)}
+                  </p>
                 </div>
               </div>
-              <div className="mt-4 flex gap-2">
+
+              <div className="mt-3 text-xs text-slate-600 space-y-1">
+                <p>
+                  <span className="font-bold">📅 Ayer:</span>{" "}
+                  {yesterday.length ? yesterday.join(" · ") : "sin quests"}
+                </p>
+                <p>
+                  <span className="font-bold">🔥 Hoy:</span>{" "}
+                  {today.length ? today.join(" · ") : "sin quests"}
+                </p>
+              </div>
+
+              <div className="mt-3 flex gap-2">
                 <Input type="number" placeholder="Puntos" className="w-24"
                   value={form.amount || ""} onChange={(e) => setAward(kid.id, { amount: e.target.value })} />
                 <Input placeholder="Razón (opcional)" className="flex-1"
@@ -96,7 +124,7 @@ export default function ParentDashboard() {
                 {QUICK.map((q) => (
                   <button key={q} type="button" onClick={() => setAward(kid.id, { amount: String(q) })}
                     className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold hover:bg-slate-200">
-                    {q}
+                    {fmtPoints(q)}
                   </button>
                 ))}
                 <div className="ml-auto flex gap-2">
@@ -137,7 +165,7 @@ export default function ParentDashboard() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold truncate">
                   {p.kid_name} — {p.title}
-                  {p.type === "claim" ? ` (+${p.points})` : ` (${p.cost} pts)`}
+                  {p.type === "claim" ? ` (+${fmtPoints(p.points)})` : ` (${fmtPoints(p.cost)} pts)`}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {p.type === "claim" ? "Quest completada" : "Recompensa canjeada"}
@@ -149,34 +177,6 @@ export default function ParentDashboard() {
             <li className="py-4 text-sm text-muted-foreground text-center">Nada pendiente. ¡Todo al día!</li>
           ) : null}
         </ul>
-      </section>
-
-      <section className="rounded-2xl bg-white border border-slate-100 shadow-sm p-5">
-        <h2 className="font-bold mb-3">Quests de hoy por niño</h2>
-        <div className="space-y-3">
-          {data.today.map(({ kid, quests }) => {
-            const counts = quests.reduce((acc, q) => { acc[q.state] = (acc[q.state] || 0) + 1; return acc; }, {});
-            return (
-              <div key={kid.id} className="flex items-center gap-2 flex-wrap">
-                <span className="text-lg">{kid.avatar}</span>
-                <span className="font-semibold text-sm">{kid.name}:</span>
-                {quests.length ? (
-                  <>
-                    <StateChip state="open" className="!px-2 !py-0.5" /> ×{counts.open || 0}
-                    <StateChip state="pending" className="!px-2 !py-0.5" /> ×{counts.pending || 0}
-                    <StateChip state="done" className="!px-2 !py-0.5" /> ×{counts.done || 0}
-                    {counts.missed ? (<><StateChip state="missed" className="!px-2 !py-0.5" /> ×{counts.missed}</>) : null}
-                  </>
-                ) : (
-                  <span className="text-xs text-muted-foreground">sin quests diarias hoy</span>
-                )}
-              </div>
-            );
-          })}
-          {!data.today.length ? (
-            <p className="text-sm text-muted-foreground">Agrega niños y quests para ver el resumen.</p>
-          ) : null}
-        </div>
       </section>
 
       <section className="rounded-2xl bg-white border border-slate-100 shadow-sm p-5">
