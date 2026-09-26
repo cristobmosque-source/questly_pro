@@ -22,7 +22,7 @@ export default function ParentQuests() {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(null); // quest | "new"
   const [deleting, setDeleting] = useState(null);
-  const [reassigning, setReassigning] = useState(null); // quest "una sola vez" completada
+  const [reassigning, setReassigning] = useState(null); // quest "una sola vez" a asignar
 
   const load = useCallback(async () => {
     setError(null);
@@ -89,16 +89,15 @@ export default function ParentQuests() {
     }
   };
 
-  // ♻️ Reasignar una quest "una sola vez" completada: crea una nueva instancia
-  // para el niño elegido; el historial anterior queda intacto.
-  const confirmReassign = async (kidId) => {
+  // ♻️ Reasignar una quest "una sola vez": crea una nueva ASIGNACIÓN de la
+  // misma quest (sin duplicar la definición); el historial queda intacto.
+  const confirmReassign = async (kidId, dueDate) => {
     setBusy(true);
     try {
       const res = await api(`/parent/quests/${reassigning.id}/reassign`, {
-        method: "POST", body: { kid_id: kidId },
+        method: "POST", body: { kid_id: kidId, due_date: dueDate },
       });
-      setData((d) => ({ ...d, quests: res.quests }));
-      toast({ title: "Reasignada", description: res.message });
+      toast({ title: "Nueva asignación", description: res.message });
       setReassigning(null);
     } catch (e) {
       toast({ title: "Ups", description: e.message, variant: "destructive" });
@@ -127,9 +126,6 @@ export default function ParentQuests() {
               <div className="flex-1 min-w-0">
                 <p className="font-bold">
                   {q.title} <span className="text-amber-600 font-extrabold text-sm">⭐ {q.points}</span>
-                  {q.repeat === "once" && q.completed_once ? (
-                    <span className="ml-2 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold px-2 py-0.5">✅ Completada</span>
-                  ) : null}
                 </p>
                 <p className="text-xs text-muted-foreground">
                   {repeatLabel(q)} · {q.repeat === "once" && q.due_date ? `Fecha: ${q.due_date} · ` : ""}
@@ -143,8 +139,8 @@ export default function ParentQuests() {
               </div>
               <div className="flex items-center gap-2">
                 <Switch checked={q.active} onCheckedChange={() => toggle(q)} />
-                {q.repeat === "once" && q.completed_once ? (
-                  <Button size="icon" variant="ghost" title="Reasignar" onClick={() => setReassigning(q)}>
+                {q.repeat === "once" ? (
+                  <Button size="icon" variant="ghost" title="Asignar a un niño" onClick={() => setReassigning(q)}>
                     <Repeat className="h-4 w-4" />
                   </Button>
                 ) : null}
@@ -190,7 +186,6 @@ export default function ParentQuests() {
         open={!!reassigning}
         quest={reassigning}
         kids={data.kids}
-        currentName={reassigning ? kidNames(reassigning) : ""}
         busy={busy}
         onConfirm={confirmReassign}
         onClose={() => setReassigning(null)}

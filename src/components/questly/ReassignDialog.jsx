@@ -1,18 +1,25 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-// ♻️ Reasignar una quest "una sola vez" ya completada: se crea una NUEVA
-// instancia para el niño elegido y el historial anterior se conserva intacto.
-export default function ReassignDialog({ open, quest, kids, currentName, busy, onConfirm, onClose }) {
+// ♻️ Reasignar una quest "una sola vez": crea una NUEVA ASIGNACIÓN que apunta
+// a la MISMA quest (mismo ID). La definición no se duplica; el catálogo y el
+// historial de asignaciones anteriores se conservan intactos.
+export default function ReassignDialog({ open, quest, kids, busy, onConfirm, onClose }) {
   const [kidId, setKidId] = useState(null);
+  const [dueDate, setDueDate] = useState("");
 
   useEffect(() => {
-    if (!open) setKidId(null);
-  }, [open]);
+    if (!open) {
+      setKidId(null);
+      setDueDate(quest ? quest.due_date || "" : "");
+    }
+  }, [open, quest]);
 
   if (!quest) return null;
   const chosen = kids.find((k) => k.id === kidId);
@@ -21,9 +28,10 @@ export default function ReassignDialog({ open, quest, kids, currentName, busy, o
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle className="text-lg font-extrabold">♻️ Reasignar tarea</DialogTitle>
+          <DialogTitle className="text-lg font-extrabold">♻️ Asignar tarea</DialogTitle>
           <DialogDescription>
-            Se crea una nueva instancia para el niño elegido; el historial anterior se conserva completo.
+            Se crea una nueva asignación de la misma quest — la definición no se duplica y el
+            historial anterior se conserva completo. Se puede asignar todas las veces que necesites.
           </DialogDescription>
         </DialogHeader>
 
@@ -33,13 +41,13 @@ export default function ReassignDialog({ open, quest, kids, currentName, busy, o
             <span className="font-semibold">{quest.emoji} {quest.title}</span>
           </p>
           <p>
-            <span className="text-muted-foreground">Actualmente asignada a:</span>{" "}
-            <span className="font-semibold">{currentName}</span>
+            <span className="text-muted-foreground">Puntos:</span>{" "}
+            <span className="font-semibold text-amber-600">⭐ {quest.points}</span>
           </p>
         </div>
 
         <div>
-          <p className="text-sm font-semibold mb-2">Reasignar a:</p>
+          <p className="text-sm font-semibold mb-2">Asignar a:</p>
           <div className="flex flex-wrap gap-2">
             {kids.map((k) => (
               <button
@@ -59,17 +67,22 @@ export default function ReassignDialog({ open, quest, kids, currentName, busy, o
           </div>
         </div>
 
+        <div className="space-y-1.5">
+          <Label htmlFor="re-due">Fecha (opcional)</Label>
+          <Input id="re-due" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+        </div>
+
         {chosen ? (
           <p className="rounded-xl bg-emerald-50 border border-emerald-100 text-emerald-800 text-sm font-semibold p-3">
-            Se reasignará '{quest.title}' a {chosen.name}.
+            Se asignará '{quest.title}' a {chosen.name}{dueDate ? " para el " + dueDate.split("-").reverse().join("/") : ""}.
           </p>
         ) : null}
 
         <div className="flex gap-2 justify-end">
           <Button variant="outline" disabled={busy} onClick={onClose}>Cancelar</Button>
           <Button className="font-bold" disabled={!chosen || busy}
-            onClick={() => chosen && onConfirm(chosen.id)}>
-            Reasignar
+            onClick={() => chosen && onConfirm(chosen.id, dueDate || null)}>
+            Asignar
           </Button>
         </div>
       </DialogContent>

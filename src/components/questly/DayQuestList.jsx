@@ -11,7 +11,7 @@ export default function DayQuestList({ items = [], actions }) {
   return (
     <ul className="divide-y divide-slate-100">
       {items.map((q) => (
-        <li key={q.id} className="py-2.5 flex items-center gap-3 flex-wrap">
+        <li key={q.assignment_id || q.id} className="py-2.5 flex items-center gap-3 flex-wrap">
           <span className="text-xl shrink-0">{q.emoji}</span>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold truncate">{q.title}</p>

@@ -62,11 +62,94 @@ export function periodFor(quest, dateStr) {
 // ¿la quest tiene una instancia concreta para cada fecha en que toca?
 export const isDateInstance = (quest) => quest.repeat === "daily" || quest.repeat === "custom_days";
 
+// Las quests "una sola vez" ya no tienen vigencia propia: viven por sus
+// ASIGNACIONES (una ejecución por niño y fecha), así que a nivel de quest no
+// "toca" ningún día en particular.
 export function dueOn(quest, dateStr) {
   if (!quest.active) return false;
   if (quest.repeat === "custom_days") return (quest.repeat_days || []).includes(questlyWeekday(dateStr));
-  if (quest.repeat === "once") return !quest.completed_once;
+  if (quest.repeat === "once") return false;
   return true; // daily, weekly, monthly
+}
+
+// ---------------------------------------------------------------------------
+// asignaciones — quests "una sola vez"
+//
+// La quest es la DEFINICIÓN (catálogo); cada asignación es una ejecución
+// concreta de esa misma quest para un niño, con su propia fecha. Reasignar
+// crea otra asignación con el MISMO quest_id: nunca se duplica la definición
+// ni el historial de las asignaciones anteriores.
+// ---------------------------------------------------------------------------
+
+// Resultado ya registrado de una asignación (null = sin resultado).
+export function assignmentResult(state, a) {
+  const period = "a:" + a.id;
+  const claims = state.claims.filter((c) => c.quest_id === a.quest_id && c.kid_id === a.kid_id && c.period === period);
+  if (claims.some((c) => c.status === "pending")) return "pending";
+  if (claims.some((c) => c.status === "not_applicable")) return "not_applicable";
+  const quest = state.quests.find((q) => q.id === a.quest_id);
+  if (claims.filter((c) => c.status === "approved").length >= (quest ? quest.times_per_period : 1)) return "done";
+  if (state.misses.some((m) => m.quest_id === a.quest_id && m.kid_id === a.kid_id && m.period === period)) return "missed";
+  if (claims.some((c) => c.status === "rejected")) return "rejected";
+  return null;
+}
+
+// Estado de una asignación: open / pending / done / missed / rejected /
+// not_applicable / pending_review (venció sin registro; decide el adulto).
+export function assignmentState(state, a) {
+  const res = assignmentResult(state, a);
+  if (res) return res;
+  if (a.due_date && a.due_date < todayStr()) return "pending_review";
+  return "open";
+}
+
+// Compatibilidad: construye asignaciones a partir de quests "una sola vez"
+// con claims/misses del modelo anterior (período "once"). No duplica nada de
+// lo que ya exista, así que sirve para migrar y para restaurar backups.
+export function buildOnceAssignments(state) {
+  for (const q of state.quests) {
+    if (q.repeat !== "once") continue;
+    const kidIds = new Set(q.assigned_to || []);
+    state.claims.filter((c) => c.quest_id === q.id && c.period === "once").forEach((c) => kidIds.add(c.kid_id));
+    state.misses.filter((x) => x.quest_id === q.id && x.period === "once").forEach((x) => kidIds.add(x.kid_id));
+    for (const kidId of kidIds) {
+      if (state.assignments.some((a) => a.quest_id === q.id && a.kid_id === kidId)) continue;
+      const a = {
+        id: newId(state), quest_id: q.id, kid_id: kidId,
+        due_date: q.due_date || null, created_at: q.created_date || nowISO(), created_by: null,
+      };
+      state.assignments.push(a);
+      state.claims
+        .filter((c) => c.quest_id === q.id && c.kid_id === kidId && c.period === "once")
+        .forEach((c) => { c.period = "a:" + a.id; c.assignment_id = a.id; });
+      state.misses
+        .filter((x) => x.quest_id === q.id && x.kid_id === kidId && x.period === "once")
+        .forEach((x) => { x.period = "a:" + a.id; });
+    }
+  }
+}
+
+// Al crear o editar la DEFINICIÓN de una quest "una sola vez" se sincronizan
+// sus asignaciones abiertas: una por niño asignado, con la fecha límite actual.
+export function syncOnceAssignments(state, quest, data) {
+  const kidIds = data.assigned_to.length ? data.assigned_to : state.kids.map((k) => k.id);
+  state.assignments = state.assignments.filter((a) =>
+    !(a.quest_id === quest.id && !kidIds.includes(a.kid_id) && assignmentResult(state, a) === null));
+  for (const a of state.assignments) {
+    if (a.quest_id === quest.id && assignmentResult(state, a) === null) {
+      a.due_date = data.due_date || null;
+    }
+  }
+  for (const kidId of kidIds) {
+    const hasOpen = state.assignments.some((a) =>
+      a.quest_id === quest.id && a.kid_id === kidId && assignmentResult(state, a) === null);
+    if (!hasOpen) {
+      state.assignments.push({
+        id: newId(state), quest_id: quest.id, kid_id: kidId,
+        due_date: data.due_date || null, created_at: nowISO(), created_by: null,
+      });
+    }
+  }
 }
 
 export const assignedTo = (quest, kidId) =>
@@ -95,16 +178,34 @@ export function newId(state) {
   return "e" + state.seq;
 }
 
-export function addTxn(state, kid, delta, reason, kind, actor = null) {
+// opts (auditoría): { actor_name, actor_role, source } — quién ejecutó el
+// movimiento y qué lo produjo. Los registros antiguos no los tienen y se
+// muestran con los campos que existan (sin inventar datos).
+export function addTxn(state, kid, delta, reason, kind, actor = null, opts = null) {
   kid.points = round1(kid.points + delta);
   if (delta > 0) kid.lifetime_points = round1(kid.lifetime_points + delta);
   const t = { id: newId(state), kid_id: kid.id, delta: round1(delta), reason, kind, at: nowISO(), actor, balance_after: kid.points };
+  if (opts) Object.assign(t, opts);
   state.txns.push(t);
   return t;
 }
 
 export const kidTxns = (state, kidId) =>
   state.txns.filter((t) => t.kid_id === kidId).sort((a, b) => (a.at < b.at ? 1 : -1));
+
+// Transacción "publicada" para el historial: beneficiario + trazabilidad de
+// reversión. `reversible` dice si el adulto todavía puede deshacerla.
+export function pubTxn(state, t) {
+  const kid = state.kids.find((k) => k.id === t.kid_id);
+  return {
+    ...t,
+    kid_name: kid ? kid.name : "—",
+    reversible: !t.reversal_of && t.status !== "reversed",
+  };
+}
+
+export const allTxns = (state) =>
+  state.txns.slice().sort((a, b) => (a.at < b.at ? 1 : -1)).map((t) => pubTxn(state, t));
 
 // Estado de la INSTANCIA de una quest en una fecha concreta.
 function instanceState(state, quest, kidId, dateStr) {
@@ -125,8 +226,8 @@ function instanceState(state, quest, kidId, dateStr) {
 const penaltyApplied = (state, quest, kidId, dateStr) =>
   state.misses.some((m) => m.quest_id === quest.id && m.kid_id === kidId && m.period === periodFor(quest, dateStr));
 
-function questForKid(state, quest, kid, dateStr) {
-  const period = periodFor(quest, dateStr);
+function questForKid(state, quest, kid, dateStr, assignment = null) {
+  const period = assignment ? "a:" + assignment.id : periodFor(quest, dateStr);
   const claims = state.claims.filter((c) => c.quest_id === quest.id && c.kid_id === kid.id && c.period === period);
   const subtasks = quest.subtasks.map((s) => ({
     id: s.id,
@@ -135,19 +236,38 @@ function questForKid(state, quest, kid, dateStr) {
   }));
   const stepsDone = subtasks.filter((s) => s.done).length;
   return {
-    id: quest.id, title: quest.title, emoji: quest.emoji, description: quest.description,
+    id: quest.id, assignment_id: assignment ? assignment.id : null,
+    title: quest.title, emoji: quest.emoji, description: quest.description,
     points: quest.points, repeat: quest.repeat, repeat_days: quest.repeat_days || [],
     limit: quest.times_per_period, used: claims.filter((c) => c.status !== "rejected").length,
     subtasks, steps_total: subtasks.length, steps_done: stepsDone,
-    state: instanceState(state, quest, kid.id, dateStr),
-    penalty: round1(quest.points / 2), due_date: quest.due_date || null,
+    state: assignment ? assignmentState(state, assignment) : instanceState(state, quest, kid.id, dateStr),
+    penalty: round1(quest.points / 2),
+    due_date: assignment ? (assignment.due_date || null) : (quest.due_date || null),
   };
 }
 
+// Quests de HOY para un niño. Las quests "una sola vez" aportan una tarjeta
+// por cada asignación sin resolver (la definición nunca se repite en el
+// catálogo, pero cada asignación es una ejecución independiente).
 export function kidQuests(state, kid, dateStr) {
-  return state.quests
-    .filter((q) => assignedTo(q, kid.id) && dueOn(q, dateStr))
-    .map((q) => questForKid(state, q, kid, dateStr));
+  const out = [];
+  for (const q of state.quests) {
+    if (!q.active) continue;
+    if (q.repeat === "once") {
+      const asgs = state.assignments
+        .filter((a) => a.quest_id === q.id && a.kid_id === kid.id)
+        .sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
+      for (const a of asgs) {
+        const res = assignmentResult(state, a);
+        if (res === "done" || res === "missed" || res === "rejected" || res === "not_applicable") continue;
+        out.push(questForKid(state, q, kid, dateStr, a));
+      }
+    } else if (assignedTo(q, kid.id) && dueOn(q, dateStr)) {
+      out.push(questForKid(state, q, kid, dateStr));
+    }
+  }
+  return out;
 }
 
 // Resumen de las instancias de AYER de un niño (solo quests por fecha)
@@ -258,7 +378,9 @@ export function pendingReviews(state) {
     if (!quest.active) continue;
     const start = quest.created_date && quest.created_date < today ? quest.created_date : null;
     for (const kid of state.kids) {
-      if (!assignedTo(quest, kid.id)) continue;
+      // las quests "una sola vez" se rigen por sus asignaciones, no por el
+      // campo assigned_to de la definición
+      if (quest.repeat !== "once" && !assignedTo(quest, kid.id)) continue;
       const push = (period, dateStr, label) => {
         if (periodResult(state, quest, kid.id, period) !== null) return;
         items.push({
@@ -286,8 +408,11 @@ export function pendingReviews(state) {
           ym = mo === 12 ? y + 1 + "-01" : y + "-" + String(mo + 1).padStart(2, "0");
         }
       } else if (quest.repeat === "once") {
-        if (quest.due_date && quest.due_date < today && !quest.completed_once)
-          push("once", quest.due_date, dateLabel(quest.due_date));
+        for (const a of state.assignments) {
+          if (a.quest_id !== quest.id || a.kid_id !== kid.id) continue;
+          if (assignmentResult(state, a) !== null) continue;
+          if (a.due_date && a.due_date < today) push("a:" + a.id, a.due_date, dateLabel(a.due_date));
+        }
       }
     }
   }
@@ -326,7 +451,7 @@ function getProg(state, s, kidId) {
 
 const streakAppliesTo = (s, kidId) => s.kid_id === null || s.kid_id === kidId;
 
-export function applyStreaksOnDecision(state, kid, quest, decision, claim) {
+export function applyStreaksOnDecision(state, kid, quest, decision, claim, actorName = null) {
   const awards = [];
   if (!quest) return awards;
   const dayKey = (claim && (claim.date || claim.period)) || null;
@@ -342,7 +467,8 @@ export function applyStreaksOnDecision(state, kid, quest, decision, claim) {
       }
       prog.count += 1;
       if (prog.count >= s.target) {
-        addTxn(state, kid, s.reward_points, "Racha completada: " + s.name, "streak", null);
+        addTxn(state, kid, s.reward_points, "Racha completada: " + s.name, "streak", actorName,
+          { actor_name: actorName, actor_role: actorName ? "parent" : "system", source: "streak" });
         prog.rounds += 1;
         prog.awarded_at = nowISO();
         prog.celebrated = false; // el niño la celebrará en su inicio
@@ -467,6 +593,7 @@ function snapshotProgress(state) {
     misses: state.misses.slice(),
     steps: state.steps.slice(),
     redemptions: state.redemptions.slice(),
+    assignments: state.assignments.slice(),
     streak_progress: JSON.parse(JSON.stringify(state.streak_progress || {})),
   };
 }
@@ -512,7 +639,19 @@ export function resetProgress(state) {
   state.redemptions = [];
   state.streak_progress = {};
   state.kids.forEach((k) => { k.points = 0; k.lifetime_points = 0; k.goal_id = null; });
-  state.quests.forEach((q) => { if (q.repeat === "once") q.completed_once = false; });
+  // las asignaciones vuelven a su estado inicial: una abierta por niño
+  // asignado en cada quest "una sola vez" activa
+  state.assignments = [];
+  for (const q of state.quests) {
+    if (q.repeat !== "once" || !q.active) continue;
+    const kidIds = (q.assigned_to || []).length ? q.assigned_to : state.kids.map((k) => k.id);
+    for (const kidId of kidIds) {
+      state.assignments.push({
+        id: newId(state), quest_id: q.id, kid_id: kidId,
+        due_date: q.due_date || null, created_at: nowISO(), created_by: null,
+      });
+    }
+  }
   return {
     message: "Progreso reiniciado: todos parten de 0. Se creó la copia de seguridad " +
       new Date(b.created_at).toLocaleString("es-CL") + ".",
@@ -529,6 +668,8 @@ export function restoreBackup(state, id) {
   state.misses = d.misses.slice();
   state.steps = d.steps.slice();
   state.redemptions = d.redemptions.slice();
+  state.assignments = (d.assignments || []).slice();
+  buildOnceAssignments(state); // backups antiguos: reconstruye lo que falte
   state.streak_progress = JSON.parse(JSON.stringify(d.streak_progress || {}));
   d.kids.forEach((bk) => {
     const k = state.kids.find((x) => x.id === bk.id);

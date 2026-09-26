@@ -150,7 +150,7 @@ export default function ParentToday() {
               </div>
               <ul className="divide-y divide-slate-100">
                 {quests.map((q) => (
-                  <li key={q.id} className="py-3 flex items-center gap-3 flex-wrap">
+                  <li key={q.assignment_id || q.id} className="py-3 flex items-center gap-3 flex-wrap">
                     <span className="text-2xl">{q.emoji}</span>
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold text-sm">{q.title}</p>

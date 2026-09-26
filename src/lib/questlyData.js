@@ -37,6 +37,7 @@ export const KIND_LABELS = {
   deduct: "Puntos quitados",
   missed: "No realizada",
   refund: "Reembolso",
+  reversal: "Reversión",
 };
 
 export function daysSummary(days) {

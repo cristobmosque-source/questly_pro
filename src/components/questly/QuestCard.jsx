@@ -29,6 +29,11 @@ export default function QuestCard({ quest, onClaim, onRetract, onToggleStep, bus
           {quest.description ? (
             <p className="text-sm text-muted-foreground mt-1">{quest.description}</p>
           ) : null}
+          {quest.due_date ? (
+            <p className="text-xs font-semibold text-slate-500 mt-1">
+              📅 Fecha: {new Date(quest.due_date + "T12:00:00Z").toLocaleDateString("es-CL", { day: "numeric", month: "long" })}
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -73,7 +78,7 @@ export default function QuestCard({ quest, onClaim, onRetract, onToggleStep, bus
           </span>
         ) : null}
         <div className="ml-auto">
-          {quest.state === "open" ? (
+          {quest.state === "open" || quest.state === "pending_review" ? (
             <Button
               size="lg"
               disabled={busy || stepsLeft > 0}

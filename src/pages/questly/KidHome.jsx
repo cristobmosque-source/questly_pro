@@ -40,7 +40,10 @@ export default function KidHome() {
   const claim = async (quest) => {
     setBusy(true);
     try {
-      const res = await api(`/kid/quests/${quest.id}/claim`, { method: "POST" });
+      const res = await api(`/kid/quests/${quest.id}/claim`, {
+        method: "POST",
+        body: quest.assignment_id ? { assignment_id: quest.assignment_id } : {},
+      });
       setData((d) => ({ ...d, kid: res.kid, quests: res.quests }));
       confetti({ particleCount: 90, spread: 70, origin: { y: 0.7 }, colors: [data.kid.color || "#7c4dff", "#fbbf24", "#34d399"] });
       toast({ title: "🎉 " + res.message });
@@ -57,7 +60,10 @@ export default function KidHome() {
   const retract = async (quest) => {
     setBusy(true);
     try {
-      const res = await api(`/kid/quests/${quest.id}/retract`, { method: "POST" });
+      const res = await api(`/kid/quests/${quest.id}/retract`, {
+        method: "POST",
+        body: quest.assignment_id ? { assignment_id: quest.assignment_id } : {},
+      });
       setData((d) => ({ ...d, kid: res.kid, quests: res.quests }));
       toast({ title: "⏳ " + res.message });
       notifyApprovalsChanged();
@@ -71,7 +77,10 @@ export default function KidHome() {
   const toggleStep = async (quest, subtaskId) => {
     setBusy(true);
     try {
-      await api(`/kid/quests/${quest.id}/step/${subtaskId}`, { method: "POST" });
+      await api(`/kid/quests/${quest.id}/step/${subtaskId}`, {
+        method: "POST",
+        body: quest.assignment_id ? { assignment_id: quest.assignment_id } : {},
+      });
       await load();
     } catch (e) {
       toast({ title: "Ups", description: e.message, variant: "destructive" });
@@ -86,7 +95,7 @@ export default function KidHome() {
   const { kid, quests, goal, goal_chosen, goal_reached, affordable, history } = data;
   const yesterday = data.yesterday || { date: data.yesterday_date, items: [] };
   const kidColor = kid.color || "#7c4dff";
-  const open = quests.filter((q) => q.state === "open" || q.state === "rejected");
+  const open = quests.filter((q) => ["open", "rejected", "pending_review"].includes(q.state));
   const waiting = quests.filter((q) => q.state === "pending");
   const done = quests.filter((q) => q.state === "done");
   const missed = quests.filter((q) => q.state === "missed");
@@ -150,7 +159,7 @@ export default function KidHome() {
         ) : null}
         <div className="space-y-4">
           {open.map((q) => (
-            <QuestCard key={q.id} quest={q} onClaim={claim} onRetract={retract} onToggleStep={toggleStep} busy={busy} />
+            <QuestCard key={q.assignment_id || q.id} quest={q} onClaim={claim} onRetract={retract} onToggleStep={toggleStep} busy={busy} />
           ))}
         </div>
 
@@ -159,7 +168,7 @@ export default function KidHome() {
         ) : null}
         <div className="space-y-4">
           {waiting.map((q) => (
-            <QuestCard key={q.id} quest={q} onClaim={claim} onRetract={retract} onToggleStep={toggleStep} busy={busy} />
+            <QuestCard key={q.assignment_id || q.id} quest={q} onClaim={claim} onRetract={retract} onToggleStep={toggleStep} busy={busy} />
           ))}
         </div>
 
@@ -168,7 +177,7 @@ export default function KidHome() {
         ) : null}
         <div className="space-y-4">
           {done.map((q) => (
-            <QuestCard key={q.id} quest={q} onClaim={claim} onRetract={retract} onToggleStep={toggleStep} busy={busy} />
+            <QuestCard key={q.assignment_id || q.id} quest={q} onClaim={claim} onRetract={retract} onToggleStep={toggleStep} busy={busy} />
           ))}
         </div>
 
@@ -177,7 +186,7 @@ export default function KidHome() {
         ) : null}
         <div className="space-y-4">
           {missed.map((q) => (
-            <QuestCard key={q.id} quest={q} onClaim={claim} onRetract={retract} onToggleStep={toggleStep} busy={busy} />
+            <QuestCard key={q.assignment_id || q.id} quest={q} onClaim={claim} onRetract={retract} onToggleStep={toggleStep} busy={busy} />
           ))}
         </div>
 

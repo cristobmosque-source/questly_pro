@@ -19,6 +19,8 @@ import {
   streaksForKid, collectCelebrations, applyStreaksOnDecision, breakDayStreaks,
   pubStreak, validateStreak, removeStreak,
   pruneBackups, listBackups, resetProgress, restoreBackup,
+  assignmentResult, assignmentState, buildOnceAssignments, syncOnceAssignments,
+  pubTxn, allTxns,
 } from "@/services/storeDomain";
 
 const KEY = "questly_store_v3";
@@ -60,6 +62,11 @@ function seedState() {
     streak_progress: {}, // "streakId|kidId" -> {count, rounds, completed, last_day, awarded_at, celebrated}
     pin_requests: [],    // {id, kid_id, status: pending|approved|rejected, at, decided_at}
     backups: [],         // copias creadas automáticamente antes de un reinicio
+    // ASIGNACIONES: ejecuciones de quests "una sola vez" — una por niño/fecha,
+    // todas apuntando al mismo quest_id (la definición nunca se duplica).
+    assignments: [
+      { id: "a90", quest_id: "q4", kid_id: "k1", due_date: "2026-10-03", created_at: "2026-09-25T10:00:00.000Z", created_by: "Papá / CMB" },
+    ],
     // instancias por fecha (d:YYYY-MM-DD); semanal/mensual/once usan su propio bucket
     claims: [
       { id: "c1", quest_id: "q1", kid_id: "k1", period: "d:2026-09-24", date: "2026-09-24", status: "approved", completed_by: "kid", at: "2026-09-24T19:30:00.000Z", decided_at: "2026-09-24T19:35:00.000Z" },
@@ -98,6 +105,13 @@ function migrate(state, fromLegacy) {
   if (!state.streak_progress) state.streak_progress = {};
   if (!state.backups) state.backups = [];
   if (!state.pin_requests) state.pin_requests = [];
+  // modelo de asignaciones: cada quest "una sola vez" se ejecuta mediante
+  // asignaciones propias (período "a:<id>"); los claims/misses del modelo
+  // anterior (período "once") se reconvierten aquí.
+  if (!state.assignments) {
+    state.assignments = [];
+    buildOnceAssignments(state);
+  }
   state.kids.forEach((k) => { if (k.pin === undefined) k.pin = null; });
   // Las quests guardan desde cuándo existen: delimita qué instancias vencidas
   // sin registro aparecen como "pendientes de revisión".
@@ -313,9 +327,20 @@ function handle(state, method, path, body) {
     const kid = requireKid(state);
     const quest = state.quests.find((q) => q.id === m[1]);
     if (!quest || !quest.active) throw new ApiError("Esta quest ya no existe.");
-    if (!assignedTo(quest, kid.id)) throw new ApiError("Esta quest no es tuya.");
-    if (!dueOn(quest, tStr)) throw new ApiError("Esta quest no toca hoy.");
-    const period = periodFor(quest, tStr);
+    // quests "una sola vez": la instancia es una ASIGNACIÓN de la misma quest
+    let period, assignment = null;
+    if (quest.repeat === "once") {
+      const own = state.assignments
+        .filter((a) => a.quest_id === quest.id && a.kid_id === kid.id && assignmentResult(state, a) === null)
+        .sort((a, b) => (a.created_at < b.created_at ? -1 : 1));
+      assignment = own.find((a) => a.id === body.assignment_id) || own[0];
+      if (!assignment) throw new ApiError("Esta quest no toca hoy.");
+      period = "a:" + assignment.id;
+    } else {
+      if (!assignedTo(quest, kid.id)) throw new ApiError("Esta quest no es tuya.");
+      if (!dueOn(quest, tStr)) throw new ApiError("Esta quest no toca hoy.");
+      period = periodFor(quest, tStr);
+    }
     if (state.misses.some((x) => x.quest_id === quest.id && x.kid_id === kid.id && x.period === period))
       throw new ApiError("Esta quest quedó marcada como no realizada.");
     const claims = state.claims.filter((c) => c.quest_id === quest.id && c.kid_id === kid.id && c.period === period);
@@ -328,7 +353,12 @@ function handle(state, method, path, body) {
     const stepsDone = state.steps.filter((t) => t.quest_id === quest.id && t.kid_id === kid.id && t.period === period).length;
     if (quest.subtasks.length && stepsDone < quest.subtasks.length)
       throw new ApiError("Te faltan pasos por marcar antes de decir ¡listo!.");
-    state.claims.push({ id: newId(state), quest_id: quest.id, kid_id: kid.id, period, date: isDateInstance(quest) ? tStr : null, status: "pending", completed_by: "kid", at: nowISO() });
+    state.claims.push({
+      id: newId(state), quest_id: quest.id, kid_id: kid.id, period,
+      assignment_id: assignment ? assignment.id : null,
+      date: isDateInstance(quest) ? tStr : null,
+      status: "pending", completed_by: "kid", at: nowISO(),
+    });
     return { kid: pubKid(kid), quests: kidQuests(state, kid, tStr), message: "¡Listo! Ahora queda esperando que un adulto la revise." };
   }
 
@@ -339,7 +369,14 @@ function handle(state, method, path, body) {
     const kid = requireKid(state);
     const quest = state.quests.find((q) => q.id === m[1]);
     if (!quest) throw new ApiError("Esta quest ya no existe.", { status: 404 });
-    const period = periodFor(quest, tStr);
+    let period;
+    if (quest.repeat === "once") {
+      const a = state.assignments.find((x) => x.id === body.assignment_id && x.quest_id === quest.id && x.kid_id === kid.id);
+      if (!a) throw new ApiError("Esa asignación ya no existe.", { status: 404 });
+      period = "a:" + a.id;
+    } else {
+      period = periodFor(quest, tStr);
+    }
     const idx = state.claims.findIndex((c) =>
       c.quest_id === quest.id && c.kid_id === kid.id && c.period === period && c.status === "pending");
     if (idx === -1)
@@ -358,7 +395,14 @@ function handle(state, method, path, body) {
     if (!quest) throw new ApiError("Esta quest ya no existe.");
     const step = quest.subtasks.find((s) => s.id === m[2]);
     if (!step) throw new ApiError("Ese paso no existe.");
-    const period = periodFor(quest, tStr);
+    let period;
+    if (quest.repeat === "once") {
+      const a = state.assignments.find((x) => x.id === body.assignment_id && x.quest_id === quest.id && x.kid_id === kid.id);
+      if (!a) throw new ApiError("Esa asignación ya no existe.", { status: 404 });
+      period = "a:" + a.id;
+    } else {
+      period = periodFor(quest, tStr);
+    }
     const key = (t) => t.quest_id === quest.id && t.kid_id === kid.id && t.period === period && t.subtask_id === step.id;
     if (state.steps.some(key)) state.steps = state.steps.filter((t) => !key(t));
     else state.steps.push({ quest_id: quest.id, kid_id: kid.id, period, subtask_id: step.id });
@@ -432,8 +476,14 @@ function handle(state, method, path, body) {
       if (used >= reward.stock_limit) throw new ApiError("Se agotó el cupo " + periodLabel(reward.stock_period === "daily" ? "daily" : reward.stock_period) + ".");
     }
     if (reward.stock_mode === "fixed") reward.stock -= 1;
-    addTxn(state, kid, -reward.cost, "Canje: " + reward.title, "redeem");
-    state.redemptions.push({ id: newId(state), reward_id: reward.id, kid_id: kid.id, title: reward.title, emoji: reward.emoji, cost: reward.cost, status: "pending", at: nowISO() });
+    const t = addTxn(state, kid, -reward.cost, "Canje: " + reward.title, "redeem", kid.name,
+      { actor_name: kid.name, actor_role: "kid", source: "redeem" });
+    const redemption = {
+      id: newId(state), reward_id: reward.id, kid_id: kid.id,
+      title: reward.title, emoji: reward.emoji, cost: reward.cost,
+      status: "pending", at: nowISO(), txn_id: t.id,
+    };
+    state.redemptions.push(redemption);
     return { message: "¡Canjeada! Un adulto te la entregará pronto." };
   }
 
@@ -474,10 +524,7 @@ function handle(state, method, path, body) {
     requireParent(state);
     const activity = state.txns
       .slice().sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 200)
-      .map((t) => {
-        const kid = state.kids.find((k) => k.id === t.kid_id);
-        return { ...t, reason: (kid ? kid.name + ": " : "") + t.reason };
-      });
+      .map((t) => pubTxn(state, t));
     return {
       kids: state.kids.map((k) => ({
         ...pubKid(k),
@@ -526,7 +573,8 @@ function handle(state, method, path, body) {
     state.misses.push({ id: newId(state), quest_id: quest.id, kid_id: kid.id, period, penalty, at: nowISO() });
     const mt = addTxn(state, kid, -penalty,
       "'" + quest.title + "' no realizada" + (dateStr !== tStr ? " (" + dateLabel(dateStr) + ")" : ""),
-      "missed", parent.name);
+      "missed", parent.name,
+      { actor_name: parent.name, actor_role: "parent", source: "missed" });
     mt.origin = "parent"; mt.origin_name = parent.name;
     // una instancia no realizada rompe las rachas de días consecutivos
     breakDayStreaks(state, kid, quest);
@@ -557,10 +605,14 @@ function handle(state, method, path, body) {
         throw new ApiError("Esta quest no corresponde al " + dateLabel(dateStr) + ".");
       period = periodFor(quest, dateStr);
     } else if (quest.repeat === "once") {
-      if (quest.completed_once) throw new ApiError("Esta quest ya está resuelta.");
-      if (!quest.due_date || quest.due_date >= tStr) throw new ApiError("Esta quest todavía no vence.");
-      dateStr = quest.due_date;
-      period = "once";
+      // la instancia es una ASIGNACIÓN de la quest (período "a:<id>")
+      const p = String(body.period || "");
+      const a = p.startsWith("a:") ? state.assignments.find((x) => x.id === p.slice(2)) : null;
+      if (!a || a.quest_id !== quest.id) throw new ApiError("Esa asignación ya no existe.", { status: 404 });
+      if (a.kid_id !== kid.id) throw new ApiError("Esta asignación no corresponde a este niño.");
+      if (assignmentResult(state, a) !== null) throw new ApiError("Esta asignación ya está resuelta.");
+      dateStr = a.due_date;
+      period = p;
     } else if (quest.repeat === "weekly") {
       period = String(body.period || "");
       if (!/^w:\d{4}-\d{2}-\d{2}$/.test(period) || period.slice(2) >= mondayStr(tStr))
@@ -573,7 +625,7 @@ function handle(state, method, path, body) {
     } else {
       throw new ApiError("Esta quest no se resuelve por instancia.");
     }
-    if (!assignedTo(quest, kid.id))
+    if (quest.repeat !== "once" && !assignedTo(quest, kid.id))
       throw new ApiError("Esta quest no corresponde a este niño.");
     const claims = state.claims.filter((c) => c.quest_id === quest.id && c.kid_id === kid.id && c.period === period);
     if (claims.some((c) => c.status === "pending"))
@@ -594,17 +646,16 @@ function handle(state, method, path, body) {
         status: "not_applicable", decision: "not_applicable", completed_by: "parent",
         comment, source, at: nowISO(), decided_at: nowISO(),
       });
-      if (quest.repeat === "once") quest.completed_once = true;
       message = "🚫 No aplica: '" + quest.title + "' del " + periodTxt +
         " quedó cerrada sin puntos ni penalización.";
     } else if (result === "not_done") {
       const penalty = round1(quest.points / 2);
       state.misses.push({ id: newId(state), quest_id: quest.id, kid_id: kid.id, period, penalty, comment, source, at: nowISO() });
       const t = addTxn(state, kid, -penalty,
-        "'" + quest.title + "' no realizada (" + periodTxt + ")", "missed", parent.name);
+        "'" + quest.title + "' no realizada (" + periodTxt + ")", "missed", parent.name,
+        { actor_name: parent.name, actor_role: "parent", source: "review" });
       t.origin = "parent"; t.origin_name = parent.name;
       breakDayStreaks(state, kid, quest);
-      if (quest.repeat === "once") quest.completed_once = true;
       message = "❌ No realizada: se descontaron " + penalty + " puntos a " + kid.name + " (50%).";
     } else {
       const full = result === "full";
@@ -617,12 +668,12 @@ function handle(state, method, path, body) {
       state.claims.push(claim);
       const t = addTxn(state, kid, awarded,
         quest.title + (full ? "" : " (hecha a medias)"),
-        full ? "quest" : "partial", parent.name);
+        full ? "quest" : "partial", parent.name,
+        { actor_name: parent.name, actor_role: "parent", source: "review" });
       t.origin = "parent"; t.origin_name = parent.name;
-      if (quest.repeat === "once") quest.completed_once = true;
       message = (full ? "✅ Hecha correctamente: " : "🟡 Hecha a medias: ") + kid.name +
         " ganó " + awarded + " puntos — registrada por " + parent.name + ".";
-      const awards = applyStreaksOnDecision(state, kid, quest, full ? "approve" : "partial", claim);
+      const awards = applyStreaksOnDecision(state, kid, quest, full ? "approve" : "partial", claim, parent.name);
       awards.forEach((s) => {
         message += " 🔥 ¡Racha completada: " + s.name + "! +" + s.reward_points + " puntos para " + kid.name + ".";
       });
@@ -630,36 +681,27 @@ function handle(state, method, path, body) {
     return { message };
   }
 
-  // ♻️ Reasignar una quest "una sola vez" ya resuelta: crea una NUEVA
-  // instancia para el niño elegido. La quest original y todo su historial
-  // (claims, puntos, transacciones) quedan intactos.
+  // ♻️ Reasignar una quest "una sola vez": crea una NUEVA ASIGNACIÓN que
+  // apunta a la MISMA quest (mismo ID). La definición no se duplica, no hay
+  // límite de asignaciones y el historial de las anteriores queda intacto.
   if (method === "POST" && (m = path.match(/^\/parent\/quests\/([^/]+)\/reassign$/))) {
-    requireParent(state);
+    const parent = requireParent(state);
     const quest = state.quests.find((q) => q.id === m[1]);
     if (!quest) throw new ApiError("Esa quest ya no existe.", { status: 404 });
     if (quest.repeat !== "once")
-      throw new ApiError("Solo las quests de una sola vez se pueden reasignar.");
-    const resolved = quest.completed_once ||
-      state.claims.some((c) => c.quest_id === quest.id && c.status !== "pending") ||
-      state.misses.some((x) => x.quest_id === quest.id);
-    if (!resolved)
-      throw new ApiError("Esta quest todavía no está completada; edítala para cambiar su asignación.");
+      throw new ApiError("Solo las quests de una sola vez se asignan por fecha.");
     const kid = state.kids.find((k) => k.id === body.kid_id);
-    if (!kid) throw new ApiError("Elige a qué niño reasignarla.", { status: 404 });
-    const copy = {
-      id: newId(state), active: true,
-      title: quest.title, emoji: quest.emoji, description: quest.description,
-      points: quest.points, repeat: "once", repeat_days: [],
-      times_per_period: quest.times_per_period, assigned_to: [kid.id],
-      subtasks: (quest.subtasks || []).map((s, i) => ({ id: "st" + i, text: s.text })),
-      due_date: quest.due_date || null,
-      created_date: tStr, completed_once: false, reassigned_from: quest.id,
-    };
-    state.quests.push(copy);
+    if (!kid) throw new ApiError("Elige a qué niño asignarla.", { status: 404 });
+    const due_date = body.due_date && /^\d{4}-\d{2}-\d{2}$/.test(String(body.due_date))
+      ? String(body.due_date) : (quest.due_date || null);
+    state.assignments.push({
+      id: newId(state), quest_id: quest.id, kid_id: kid.id,
+      due_date, created_at: nowISO(), created_by: parent.name,
+    });
     return {
-      quests: state.quests,
-      message: "Nueva instancia de '" + quest.title + "' asignada a " + kid.name +
-        ": la podrá hacer y ganar sus puntos. El historial anterior se conserva.",
+      message: "Nueva asignación de '" + quest.title + "' para " + kid.name +
+        (due_date ? " (" + dateLabel(due_date) + ")" : "") +
+        ". Es la misma quest: el catálogo y el historial no cambian.",
     };
   }
 
@@ -671,7 +713,10 @@ function handle(state, method, path, body) {
   if (method === "POST" && path === "/parent/quests") {
     requireParent(state);
     const data = validateQuest(state, body);
-    state.quests.push({ id: newId(state), active: true, created_date: tStr, ...data });
+    const quest = { id: newId(state), active: true, created_date: tStr, ...data };
+    state.quests.push(quest);
+    // una quest "una sola vez" nace con una ASIGNACIÓN por niño asignado
+    if (quest.repeat === "once") syncOnceAssignments(state, quest, data);
     return { quests: state.quests, message: "Quest creada." };
   }
 
@@ -688,12 +733,71 @@ function handle(state, method, path, body) {
       state.claims = state.claims.filter((c) => c.quest_id !== quest.id);
       state.misses = state.misses.filter((x) => x.quest_id !== quest.id);
       state.steps = state.steps.filter((t) => t.quest_id !== quest.id);
+      state.assignments = state.assignments.filter((a) => a.quest_id !== quest.id);
       // las rachas ligadas a la quest desaparecen con ella (y su progreso)
       state.streaks.filter((s) => s.quest_id === quest.id).forEach(removeStreak.bind(null, state));
       return { quests: state.quests, message: "Quest eliminada." };
     }
-    Object.assign(quest, validateQuest(state, body));
+    const data = validateQuest(state, body);
+    Object.assign(quest, data);
+    // editar una quest "una sola vez" sincroniza sus asignaciones abiertas
+    if (quest.repeat === "once") syncOnceAssignments(state, quest, data);
     return { quests: state.quests, message: "Quest actualizada." };
+  }
+
+  // ----- historial de auditoría (adulto) --------------------------------------
+  // Libro completo de movimientos: beneficiario, actor, motivo y trazabilidad
+  // de reversiones. Solo el adulto puede deshacer (movimiento inverso).
+  if (method === "GET" && path === "/parent/history") {
+    requireParent(state);
+    return {
+      kids: state.kids.map(pubKid),
+      parent_name: state.parent.name,
+      txns: allTxns(state),
+    };
+  }
+
+  // ↩️ Deshacer un movimiento: NO se borra ni se modifica el original — se
+  // crea una transacción INVERSA y ambos quedan enlazados
+  // (original.reversal_txn_id ↔ reversión.reversal_of). Un movimiento ya
+  // revertido no se puede revertir dos veces. Los canjes, además de los
+  // puntos, restauran la recompensa y su stock.
+  if (method === "POST" && (m = path.match(/^\/parent\/txns\/([^/]+)\/reverse$/))) {
+    const parent = requireParent(state);
+    const t = state.txns.find((x) => x.id === m[1]);
+    if (!t) throw new ApiError("Ese movimiento ya no existe.", { status: 404 });
+    if (t.reversal_of) throw new ApiError("Una reversión no se puede volver a revertir.");
+    if (t.status === "reversed") throw new ApiError("Este movimiento ya fue revertido.");
+    const kid = state.kids.find((k) => k.id === t.kid_id);
+    if (!kid) throw new ApiError("El niño de este movimiento ya no existe.", { status: 404 });
+    let extra = "";
+    if (t.kind === "redeem") {
+      const rd = state.redemptions.find((r) => r.txn_id === t.id) ||
+        state.redemptions.find((r) => r.kid_id === t.kid_id && t.reason === "Canje: " + r.title);
+      if (rd && rd.status !== "reverted") {
+        rd.status = "reverted";
+        rd.decided_at = nowISO();
+        const reward = state.rewards.find((r) => r.id === rd.reward_id);
+        if (reward && reward.stock_mode === "fixed") {
+          reward.stock += 1;
+          extra = " El canje quedó revertido y el stock de la recompensa fue repuesto.";
+        } else {
+          extra = " El canje quedó revertido.";
+        }
+      }
+    }
+    const r = addTxn(state, kid, -t.delta, t.reason + " — Reversión", "reversal", parent.name,
+      { actor_name: parent.name, actor_role: "parent", source: "reversal" });
+    r.reversal_of = t.id;
+    t.status = "reversed";
+    t.reversed_at = nowISO();
+    t.reversed_by = parent.name;
+    t.reversal_txn_id = r.id;
+    return {
+      message: "Movimiento revertido: se " + (t.delta > 0 ? "quitaron" : "devolvieron") +
+        " " + Math.abs(t.delta) + " puntos a " + kid.name + "." + extra,
+      txns: allTxns(state),
+    };
   }
 
   if (method === "GET" && path === "/parent/approvals") {
@@ -718,10 +822,10 @@ function handle(state, method, path, body) {
       claim.awarded = quest ? quest.points : 0;
       claim.decided_at = nowISO();
       if (quest && kid) {
-        const t = addTxn(state, kid, quest.points, quest.title, "quest", parent.name);
+        const t = addTxn(state, kid, quest.points, quest.title, "quest", parent.name,
+          { actor_name: parent.name, actor_role: "parent", source: "claim" });
         t.origin = claim.completed_by || "kid";
         t.origin_name = claim.completed_by === "parent" ? parent.name : kid.name;
-        if (quest.repeat === "once") quest.completed_once = true;
       }
       message = "✅ Hecha correctamente: " + (kid ? kid.name : "el niño") +
         " ganó " + (quest ? quest.points : 0) + " puntos (100%).";
@@ -732,10 +836,10 @@ function handle(state, method, path, body) {
       claim.awarded = awarded;
       claim.decided_at = nowISO();
       if (quest && kid) {
-        const t = addTxn(state, kid, awarded, quest.title + " (hecha a medias)", "partial", parent.name);
+        const t = addTxn(state, kid, awarded, quest.title + " (hecha a medias)", "partial", parent.name,
+          { actor_name: parent.name, actor_role: "parent", source: "claim" });
         t.origin = claim.completed_by || "kid";
         t.origin_name = claim.completed_by === "parent" ? parent.name : kid.name;
-        if (quest.repeat === "once") quest.completed_once = true;
       }
       message = "🟡 Hecha a medias: " + (kid ? kid.name : "el niño") +
         " ganó solo " + awarded + " puntos (25% de " + (quest ? quest.points : 0) + ").";
@@ -747,7 +851,8 @@ function handle(state, method, path, body) {
       claim.decided_at = nowISO();
       if (quest && kid) {
         state.misses.push({ id: newId(state), quest_id: quest.id, kid_id: kid.id, period: claim.period, penalty, at: nowISO() });
-        const t = addTxn(state, kid, -penalty, "'" + quest.title + "' no realizada (dijo que la hizo)", "missed", parent.name);
+        const t = addTxn(state, kid, -penalty, "'" + quest.title + "' no realizada (dijo que la hizo)", "missed", parent.name,
+          { actor_name: parent.name, actor_role: "parent", source: "claim" });
         t.origin = "parent"; t.origin_name = parent.name;
       }
       message = "❌ No realizada: se descontaron " + penalty + " puntos a " +
@@ -768,7 +873,7 @@ function handle(state, method, path, body) {
     // Las rachas reaccionan a la decisión (solo el 100% suma; la no realizada
     // rompe las de días consecutivos; a medias y no aplica no cuentan ni rompen).
     if (quest && kid) {
-      const awards = applyStreaksOnDecision(state, kid, quest, body.decision, claim);
+      const awards = applyStreaksOnDecision(state, kid, quest, body.decision, claim, parent.name);
       awards.forEach((s) => {
         message += " 🔥 ¡Racha completada: " + s.name + "! +" + s.reward_points + " puntos para " + kid.name + ".";
       });
@@ -791,7 +896,8 @@ function handle(state, method, path, body) {
     } else {
       redemption.status = "rejected";
       redemption.decided_at = nowISO();
-      if (kid) addTxn(state, kid, redemption.cost, "Reembolso: " + redemption.title, "refund", parent.name);
+      if (kid) addTxn(state, kid, redemption.cost, "Reembolso: " + redemption.title, "refund", parent.name,
+        { actor_name: parent.name, actor_role: "parent", source: "refund" });
       if (reward && reward.stock_mode === "fixed") reward.stock += 1;
       message = "Rechazada — los puntos vuelven a " + (kid ? kid.name : "el niño") + ".";
     }
@@ -954,7 +1060,7 @@ function handle(state, method, path, body) {
       yesterday_date: yStr,
       yesterday: { date: yStr, items: dayItems(state, kid, yStr) },
       today: { date: tStr, quests: kidQuests(state, kid, tStr) },
-      history: kidTxns(state, kid.id),
+      history: kidTxns(state, kid.id).map((t) => pubTxn(state, t)),
       redemptions: state.redemptions.filter((r) => r.kid_id === kid.id)
         .map((r) => ({ id: r.id, emoji: r.emoji, title: r.title, cost: r.cost, at: r.at, status: r.status }))
         .sort((a, b) => (a.at < b.at ? 1 : -1)),
@@ -970,6 +1076,7 @@ function handle(state, method, path, body) {
       state.claims = state.claims.filter((c) => c.kid_id !== kid.id);
       state.misses = state.misses.filter((x) => x.kid_id !== kid.id);
       state.steps = state.steps.filter((t) => t.kid_id !== kid.id);
+      state.assignments = state.assignments.filter((a) => a.kid_id !== kid.id);
       state.txns = state.txns.filter((t) => t.kid_id !== kid.id);
       state.redemptions = state.redemptions.filter((r) => r.kid_id !== kid.id);
       state.pin_requests = state.pin_requests.filter((r) => r.kid_id !== kid.id);
@@ -1000,7 +1107,8 @@ function handle(state, method, path, body) {
     const negate = !!body.negate;
     const reason = String(body.reason || "").trim() ||
       (negate ? "Puntos quitados por un adulto" : "Puntos de regalo");
-    addTxn(state, kid, negate ? -amount : amount, reason, negate ? "deduct" : "award", parent.name);
+    addTxn(state, kid, negate ? -amount : amount, reason, negate ? "deduct" : "award", parent.name,
+      { actor_name: parent.name, actor_role: "parent", source: "manual" });
     return {
       message: "Se le " + (negate ? "quitaron" : "dieron") + " " + amount + " puntos a " + kid.name + ".",
     };

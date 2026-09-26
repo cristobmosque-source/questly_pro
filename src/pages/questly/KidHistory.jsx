@@ -67,9 +67,12 @@ export default function KidHistory() {
                   "text-xs font-bold rounded-full px-2.5 py-1 " +
                   (r.status === "pending" ? "bg-amber-100 text-amber-700"
                     : r.status === "approved" ? "bg-emerald-100 text-emerald-700"
-                    : "bg-slate-100 text-slate-500")
+                      : r.status === "reverted" ? "bg-amber-100 text-amber-700"
+                        : "bg-slate-100 text-slate-500")
                 }>
-                  {r.status === "pending" ? "Por entregar" : r.status === "approved" ? "Entregada" : "Rechazada"}
+                  {r.status === "pending" ? "Por entregar"
+                    : r.status === "approved" ? "Entregada"
+                      : r.status === "reverted" ? "Revertida" : "Rechazada"}
                 </span>
               </li>
             ))}
