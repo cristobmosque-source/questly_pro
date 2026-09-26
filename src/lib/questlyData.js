@@ -64,4 +64,5 @@ export const STATE_META = {
   done: { label: "¡Hecha!", className: "bg-violet-100 text-violet-700" },
   missed: { label: "No realizada", className: "bg-rose-100 text-rose-700" },
   rejected: { label: "Rechazada", className: "bg-slate-200 text-slate-600" },
+  not_applicable: { label: "No aplica", className: "bg-slate-100 text-slate-500" },
 };

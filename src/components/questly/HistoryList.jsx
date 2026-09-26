@@ -18,6 +18,7 @@ export default function HistoryList({ entries = [] }) {
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{h.reason}</p>
               <p className="text-xs text-muted-foreground">
+                {h.origin ? (h.origin === "parent" ? "👨 Marcada por " : "🧒 Marcada por ") + (h.origin_name || "el adulto") + " · " : ""}
                 {KIND_LABELS[h.kind] ? KIND_LABELS[h.kind] + " · " : ""}
                 {fmtWhen(h.at)}
                 {h.actor ? " · " + h.actor : ""}

@@ -3,6 +3,7 @@ import { Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { ErrorView, Loading } from "@/components/questly/ApiState";
+import { NoAplicaDialog } from "@/components/questly/InstanceDialogs";
 import { api, fmtMoney, fmtPoints, fmtWhen, notifyApprovalsChanged, notifyPointsChanged } from "@/lib/questlyApi";
 
 // Aprobaciones: quests completadas y recompensas canjeadas, una decisión
@@ -12,6 +13,7 @@ export default function ParentApprovals() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [naTarget, setNaTarget] = useState(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -23,6 +25,28 @@ export default function ParentApprovals() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // 🚫 No aplica: 0 puntos, sin transacción y sin afectar rachas, con
+  // comentario opcional que queda en la instancia.
+  const decideNoAplica = async (comment) => {
+    const c = naTarget;
+    setBusyId("claim" + c.id);
+    try {
+      const res = await api("/parent/claims/" + c.id, {
+        method: "POST",
+        body: { decision: "not_applicable", comment },
+      });
+      toast({ title: res.message });
+      setData({ claims: res.claims, redemptions: res.redemptions });
+      setNaTarget(null);
+      notifyApprovalsChanged();
+      notifyPointsChanged();
+    } catch (e) {
+      toast({ title: "Ups", description: e.message, variant: "destructive" });
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const decide = async (kind, item, decision) => {
     setBusyId(kind + item.id);
@@ -66,6 +90,11 @@ export default function ParentApprovals() {
           onClick={() => decide(kind, item, "not_done")}>
           <X className="h-4 w-4 mr-1" /> No la hizo −{fmtPoints(half(item.points))}
         </Button>
+        <Button size="sm" variant="outline" disabled={busyId === kind + item.id}
+          className="text-slate-600 border-slate-300 hover:bg-slate-50 font-bold"
+          onClick={() => setNaTarget(item)}>
+          🚫 No aplica
+        </Button>
       </div>
     ) : (
       <div className="flex gap-2">
@@ -89,7 +118,7 @@ export default function ParentApprovals() {
       <section>
         <h2 className="font-bold mb-3">Quests completadas ({data.claims.length})</h2>
         <p className="text-xs text-muted-foreground -mt-2 mb-3">
-          ✅ Hecha 100% · 🟡 Hecha a medias 25% · ❌ No realizada −50% (la decisión es definitiva)
+          ✅ Hecha 100% · 🟡 A medias 25% · ❌ No realizada −50% · 🚫 No aplica 0 (sin puntos, no rompe rachas)
         </p>
         {data.claims.length ? (
           <ul className="space-y-3">
@@ -138,6 +167,14 @@ export default function ParentApprovals() {
           </p>
         )}
       </section>
+
+      <NoAplicaDialog
+        open={!!naTarget}
+        title={naTarget ? `${naTarget.emoji} ${naTarget.title} — ${naTarget.kid_name}` : ""}
+        busy={!!naTarget && busyId === "claim" + naTarget.id}
+        onConfirm={decideNoAplica}
+        onClose={() => setNaTarget(null)}
+      />
     </div>
   );
 }

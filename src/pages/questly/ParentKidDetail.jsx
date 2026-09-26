@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { ErrorView, Loading } from "@/components/questly/ApiState";
 import DayQuestList from "@/components/questly/DayQuestList";
+import PastInstanceActions from "@/components/questly/PastInstanceActions";
 import HistoryList from "@/components/questly/HistoryList";
 import { api, fmtDateLabel, fmtMoney, fmtPoints, fmtWhen, notifyPointsChanged } from "@/lib/questlyApi";
 
@@ -106,7 +107,12 @@ export default function ParentKidDetail() {
       {data.yesterday ? (
         <section className="rounded-2xl bg-white border border-slate-100 shadow-sm p-5">
           <h2 className="font-bold mb-1">📅 Ayer — <span className="font-normal text-muted-foreground capitalize">{fmtDateLabel(data.yesterday_date)}</span></h2>
-          <DayQuestList items={data.yesterday.items} />
+          <DayQuestList items={data.yesterday.items}
+            actions={(q) =>
+              q.state === "missed" && !q.penalty_applied ? (
+                <PastInstanceActions item={q} kid={kid} date={data.yesterday_date} onDone={load} />
+              ) : null
+            } />
         </section>
       ) : null}
 

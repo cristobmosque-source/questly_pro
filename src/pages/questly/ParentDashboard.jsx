@@ -18,6 +18,7 @@ function summaryParts(sum, keys) {
   if (sum.pending) parts.push(`⏳ ${plural(sum.pending, "por revisar", "por revisar")}`);
   if (sum.rejected) parts.push(`🚫 ${plural(sum.rejected, "rechazada", "rechazadas")}`);
   if (sum.missed) parts.push(`❌ ${plural(sum.missed, "no realizada", "no realizadas")}`);
+  if (sum.not_applicable) parts.push(`➖ ${plural(sum.not_applicable, "no aplica", "no aplica")}`);
   if (keys.includes("open") && sum.open) parts.push(`👉 ${plural(sum.open, "por hacer", "por hacer")}`);
   return parts;
 }

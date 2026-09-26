@@ -1,10 +1,12 @@
 // ALMACÉN DE DATOS DE QUESTLY — única fuente de datos de la aplicación.
 // Implementa las reglas de negocio de questly/app: instancias por fecha
-// (AYER/HOY) para quests diarias y custom_days, cierre automático de
-// instancias vencidas ("no realizada"), penalización del 50% única por
-// instancia, aprobación de claims (100% / 25% / -50%), retractación, stock
-// de recompensas, metas de ahorro, rachas, copias de seguridad del reinicio
-// de progreso y el flujo de PIN de los niños. Zona horaria: America/Santiago.
+// (AYER/HOY) para quests diarias y custom_days, aprobación de claims
+// (✅ 100% · 🟡 25% · ❌ -50% · 🚫 No aplica 0 puntos), retractación,
+// "marcar como hecha" por el adulto (con origen niño/adulto), instancias
+// pasadas que se mantienen abiertas hasta que el adulto las resuelve (sin
+// penalización automática), stock de recompensas, metas de ahorro, rachas,
+// backups del reinicio de progreso y el flujo de PIN de los niños.
+// Zona horaria: America/Santiago.
 
 import { ApiError } from "@/services/error";
 import { getToken } from "@/services/session";
@@ -55,11 +57,12 @@ function seedState() {
     backups: [],         // copias creadas automáticamente antes de un reinicio
     // instancias por fecha (d:YYYY-MM-DD); semanal/mensual/once usan su propio bucket
     claims: [
-      { id: "c1", quest_id: "q1", kid_id: "k1", period: "d:2026-09-24", date: "2026-09-24", status: "approved", at: "2026-09-24T19:30:00.000Z", decided_at: "2026-09-24T19:35:00.000Z" },
-      { id: "c2", quest_id: "q1", kid_id: "k1", period: "d:2026-09-25", date: "2026-09-25", status: "approved", at: "2026-09-25T08:10:00.000Z", decided_at: "2026-09-25T08:20:00.000Z" },
-      { id: "c3", quest_id: "q2", kid_id: "k1", period: "d:2026-09-25", date: "2026-09-25", status: "approved", at: "2026-09-25T09:00:00.000Z", decided_at: "2026-09-25T09:10:00.000Z" },
-      { id: "c4", quest_id: "q1", kid_id: "k2", period: "d:2026-09-25", date: "2026-09-25", status: "approved", at: "2026-09-25T08:05:00.000Z", decided_at: "2026-09-25T08:15:00.000Z" },
-      { id: "c5", quest_id: "q3", kid_id: "k2", period: "d:2026-09-24", date: "2026-09-24", status: "approved", at: "2026-09-24T18:45:00.000Z", decided_at: "2026-09-24T18:50:00.000Z" },
+      { id: "c1", quest_id: "q1", kid_id: "k1", period: "d:2026-09-24", date: "2026-09-24", status: "approved", completed_by: "kid", at: "2026-09-24T19:30:00.000Z", decided_at: "2026-09-24T19:35:00.000Z" },
+      { id: "c2", quest_id: "q1", kid_id: "k1", period: "d:2026-09-25", date: "2026-09-25", status: "approved", completed_by: "kid", at: "2026-09-25T08:10:00.000Z", decided_at: "2026-09-25T08:20:00.000Z" },
+      { id: "c3", quest_id: "q2", kid_id: "k1", period: "d:2026-09-25", date: "2026-09-25", status: "approved", completed_by: "kid", at: "2026-09-25T09:00:00.000Z", decided_at: "2026-09-25T09:10:00.000Z" },
+      { id: "c4", quest_id: "q1", kid_id: "k2", period: "d:2026-09-25", date: "2026-09-25", status: "approved", completed_by: "kid", at: "2026-09-25T08:05:00.000Z", decided_at: "2026-09-25T08:15:00.000Z" },
+      { id: "c5", quest_id: "q3", kid_id: "k2", period: "d:2026-09-24", date: "2026-09-24", status: "approved", completed_by: "kid", at: "2026-09-24T18:45:00.000Z", decided_at: "2026-09-24T18:50:00.000Z" },
+      { id: "c6", quest_id: "q6", kid_id: "k1", period: "d:2026-09-23", date: "2026-09-23", status: "not_applicable", decision: "not_applicable", completed_by: "parent", comment: "Estuvo de viaje con la abuela", at: "2026-09-23T21:00:00.000Z", decided_at: "2026-09-23T21:05:00.000Z" },
     ],
     // una penalización por instancia (quest_id + kid_id + period)
     misses: [
@@ -69,12 +72,12 @@ function seedState() {
     txns: [
       { id: "t1", kid_id: "k1", delta: 6500, reason: "Puntos de bienvenida", kind: "award", at: "2026-09-20T10:00:00.000Z", actor: "Papá / CMB", balance_after: 6500 },
       { id: "t5", kid_id: "k2", delta: 5500, reason: "Puntos de bienvenida", kind: "award", at: "2026-09-20T10:05:00.000Z", actor: "Papá / CMB", balance_after: 5500 },
-      { id: "t6", kid_id: "k2", delta: 750, reason: "Sacar la basura", kind: "quest", at: "2026-09-24T18:50:00.000Z", actor: "Papá / CMB", balance_after: 6250 },
-      { id: "t2", kid_id: "k1", delta: 500, reason: "Hacer la cama", kind: "quest", at: "2026-09-24T19:35:00.000Z", actor: "Papá / CMB", balance_after: 7000 },
-      { id: "t4", kid_id: "k2", delta: 500, reason: "Hacer la cama", kind: "quest", at: "2026-09-25T08:15:00.000Z", actor: "Papá / CMB", balance_after: 6750 },
-      { id: "t3", kid_id: "k1", delta: 500, reason: "Hacer la cama", kind: "quest", at: "2026-09-25T08:20:00.000Z", actor: "Papá / CMB", balance_after: 7500 },
-      { id: "t8", kid_id: "k2", delta: -500, reason: "'Ordenar habitación' no realizada (vie 25 sept)", kind: "missed", at: "2026-09-25T09:15:00.000Z", actor: "Papá / CMB", balance_after: 6250 },
-      { id: "t7", kid_id: "k1", delta: 1000, reason: "Ordenar habitación", kind: "quest", at: "2026-09-25T09:10:00.000Z", actor: "Papá / CMB", balance_after: 8500 },
+      { id: "t6", kid_id: "k2", delta: 750, reason: "Sacar la basura", kind: "quest", at: "2026-09-24T18:50:00.000Z", actor: "Papá / CMB", balance_after: 6250, origin: "kid", origin_name: "Lorenza" },
+      { id: "t2", kid_id: "k1", delta: 500, reason: "Hacer la cama", kind: "quest", at: "2026-09-24T19:35:00.000Z", actor: "Papá / CMB", balance_after: 7000, origin: "kid", origin_name: "Samuel" },
+      { id: "t4", kid_id: "k2", delta: 500, reason: "Hacer la cama", kind: "quest", at: "2026-09-25T08:15:00.000Z", actor: "Papá / CMB", balance_after: 6750, origin: "kid", origin_name: "Lorenza" },
+      { id: "t3", kid_id: "k1", delta: 500, reason: "Hacer la cama", kind: "quest", at: "2026-09-25T08:20:00.000Z", actor: "Papá / CMB", balance_after: 7500, origin: "kid", origin_name: "Samuel" },
+      { id: "t8", kid_id: "k2", delta: -500, reason: "'Ordenar habitación' no realizada (vie 25 sept)", kind: "missed", at: "2026-09-25T09:15:00.000Z", actor: "Papá / CMB", balance_after: 6250, origin: "parent", origin_name: "Papá / CMB" },
+      { id: "t7", kid_id: "k1", delta: 1000, reason: "Ordenar habitación", kind: "quest", at: "2026-09-25T09:10:00.000Z", actor: "Papá / CMB", balance_after: 8500, origin: "kid", origin_name: "Samuel" },
     ],
     redemptions: [],  // {id, reward_id, kid_id, title, emoji, cost, status, at, decided_at}
     sessions: {},     // token -> {user_id, role}
@@ -237,6 +240,7 @@ function instanceState(state, quest, kidId, dateStr) {
   const period = periodFor(quest, dateStr);
   const claims = state.claims.filter((c) => c.quest_id === quest.id && c.kid_id === kidId && c.period === period);
   if (claims.some((c) => c.status === "pending")) return "pending";
+  if (claims.some((c) => c.status === "not_applicable")) return "not_applicable";
   const approved = claims.filter((c) => c.status === "approved").length;
   if (approved >= quest.times_per_period) return "done";
   if (state.misses.some((m) => m.quest_id === quest.id && m.kid_id === kidId && m.period === period)) return "missed";
@@ -278,18 +282,27 @@ function kidQuests(state, kid, dateStr) {
 function dayItems(state, kid, dateStr) {
   return state.quests
     .filter((q) => isDateInstance(q) && assignedTo(q, kid.id) && dueOn(q, dateStr))
-    .map((q) => ({
-      id: q.id, title: q.title, emoji: q.emoji, points: q.points,
-      penalty: round1(q.points / 2),
-      state: instanceState(state, q, kid.id, dateStr),
-      penalty_applied: penaltyApplied(state, q, kid.id, dateStr),
-    }));
+    .map((q) => {
+      const period = periodFor(q, dateStr);
+      const na = state.claims.find((c) =>
+        c.quest_id === q.id && c.kid_id === kid.id && c.period === period && c.status === "not_applicable");
+      return {
+        id: q.id, title: q.title, emoji: q.emoji, points: q.points,
+        penalty: round1(q.points / 2),
+        state: instanceState(state, q, kid.id, dateStr),
+        penalty_applied: penaltyApplied(state, q, kid.id, dateStr),
+        comment: na ? na.comment || null : null,
+      };
+    });
 }
 
 function daySummary(state, kid, dateStr, onlyDateInstances) {
   const items = onlyDateInstances ? dayItems(state, kid, dateStr) : kidQuests(state, kid, dateStr);
   const count = (s) => items.filter((i) => i.state === s).length;
-  return { done: count("done"), pending: count("pending"), rejected: count("rejected"), missed: count("missed"), open: count("open") };
+  return {
+    done: count("done"), pending: count("pending"), rejected: count("rejected"),
+    missed: count("missed"), not_applicable: count("not_applicable"), open: count("open"),
+  };
 }
 
 function stockText(r) {
@@ -748,12 +761,14 @@ function handle(state, method, path, body) {
     const claims = state.claims.filter((c) => c.quest_id === quest.id && c.kid_id === kid.id && c.period === period);
     if (claims.some((c) => c.status === "pending"))
       throw new ApiError("Ya está esperando que un adulto la revise.");
+    if (claims.some((c) => c.status === "not_applicable"))
+      throw new ApiError("Esta quest quedó como no aplica" + (isDateInstance(quest) ? " hoy." : "."));
     if (claims.filter((c) => c.status === "approved").length >= quest.times_per_period)
       throw new ApiError("Ya completaste esta quest " + periodLabel(quest.repeat) + ".");
     const stepsDone = state.steps.filter((t) => t.quest_id === quest.id && t.kid_id === kid.id && t.period === period).length;
     if (quest.subtasks.length && stepsDone < quest.subtasks.length)
       throw new ApiError("Te faltan pasos por marcar antes de decir ¡listo!.");
-    state.claims.push({ id: newId(state), quest_id: quest.id, kid_id: kid.id, period, date: isDateInstance(quest) ? tStr : null, status: "pending", at: nowISO() });
+    state.claims.push({ id: newId(state), quest_id: quest.id, kid_id: kid.id, period, date: isDateInstance(quest) ? tStr : null, status: "pending", completed_by: "kid", at: nowISO() });
     return { kid: pubKid(kid), quests: kidQuests(state, kid, tStr), message: "¡Listo! Ahora queda esperando que un adulto la revise." };
   }
 
@@ -948,9 +963,10 @@ function handle(state, method, path, body) {
       throw new ApiError("Esta quest ya está marcada como no realizada" + (dateStr !== tStr ? " ese día" : "") + ".");
     const penalty = round1(quest.points / 2);
     state.misses.push({ id: newId(state), quest_id: quest.id, kid_id: kid.id, period, penalty, at: nowISO() });
-    addTxn(state, kid, -penalty,
+    const mt = addTxn(state, kid, -penalty,
       "'" + quest.title + "' no realizada" + (dateStr !== tStr ? " (" + dateLabel(dateStr) + ")" : ""),
       "missed", parent.name);
+    mt.origin = "parent"; mt.origin_name = parent.name;
     // una instancia no realizada rompe las rachas de días consecutivos
     breakDayStreaks(state, kid, quest);
     return {
@@ -959,6 +975,65 @@ function handle(state, method, path, body) {
       message: "Se descontaron " + penalty + " puntos a " + kid.name +
         ". La instancia del " + dateLabel(dateStr) + " quedó cerrada.",
     };
+  }
+
+  // 👨 "Marcar como hecha" / "🚫 No aplica" sobre una instancia pasada que el
+  // niño nunca marcó: registra la tarea como realizada (✅ 100% o 🟡 25%, con
+  // origen "padre") o la cierra como no aplica (0 puntos, no rompe rachas).
+  if (method === "POST" && (m = path.match(/^\/parent\/quests\/([^/]+)\/instances\/([^/]+)\/resolve$/))) {
+    const parent = requireParent(state);
+    const quest = state.quests.find((q) => q.id === m[1]);
+    const kid = state.kids.find((k) => k.id === m[2]);
+    if (!quest || !kid) throw new ApiError("Esa quest o ese niño ya no existen.", { status: 404 });
+    if (!isDateInstance(quest))
+      throw new ApiError("Solo las quests diarias o por días específicos se registran por fecha.");
+    const dateStr = body.date && /^\d{4}-\d{2}-\d{2}$/.test(String(body.date)) ? String(body.date) : tStr;
+    if (dateStr > tStr) throw new ApiError("No puedes registrar días que aún no llegan.");
+    if (!dueOn(quest, dateStr) || !assignedTo(quest, kid.id))
+      throw new ApiError("Esta quest no corresponde al " + dateLabel(dateStr) + " para este niño.");
+    const result = ["full", "partial", "not_applicable"].includes(body.result) ? body.result : null;
+    if (!result) throw new ApiError("Resultado no válido.");
+    const period = periodFor(quest, dateStr);
+    const claims = state.claims.filter((c) => c.quest_id === quest.id && c.kid_id === kid.id && c.period === period);
+    if (claims.some((c) => c.status === "pending"))
+      throw new ApiError("Hay una revisión pendiente de esta quest; decídela primero.");
+    if (claims.filter((c) => c.status === "approved").length >= quest.times_per_period)
+      throw new ApiError("Esta quest ya quedó registrada como hecha el " + dateLabel(dateStr) + ".");
+    if (claims.some((c) => c.status === "not_applicable"))
+      throw new ApiError("Esta quest ya quedó como no aplica el " + dateLabel(dateStr) + ".");
+    if (state.misses.some((x) => x.quest_id === quest.id && x.kid_id === kid.id && x.period === period))
+      throw new ApiError("Esta quest ya está marcada como no realizada el " + dateLabel(dateStr) + ".");
+    let message;
+    if (result === "not_applicable") {
+      const comment = String(body.comment || "").trim().slice(0, 140) || null;
+      state.claims.push({
+        id: newId(state), quest_id: quest.id, kid_id: kid.id, period, date: dateStr,
+        status: "not_applicable", decision: "not_applicable", completed_by: "parent",
+        comment, at: nowISO(), decided_at: nowISO(),
+      });
+      message = "🚫 No aplica: '" + quest.title + "' del " + dateLabel(dateStr) +
+        " quedó cerrada sin puntos ni penalización.";
+    } else {
+      const full = result === "full";
+      const awarded = full ? quest.points : round1(quest.points * 0.25);
+      const claim = {
+        id: newId(state), quest_id: quest.id, kid_id: kid.id, period, date: dateStr,
+        status: "approved", decision: full ? "approve" : "partial", awarded,
+        completed_by: "parent", at: nowISO(), decided_at: nowISO(),
+      };
+      state.claims.push(claim);
+      const t = addTxn(state, kid, awarded,
+        quest.title + (full ? "" : " (hecha a medias)"),
+        full ? "quest" : "partial", parent.name);
+      t.origin = "parent"; t.origin_name = parent.name;
+      message = (full ? "✅ Hecha correctamente: " : "🟡 Hecha a medias: ") + kid.name +
+        " ganó " + awarded + " puntos — registrada por " + parent.name + ".";
+      const awards = applyStreaksOnDecision(state, kid, quest, full ? "approve" : "partial", claim);
+      awards.forEach((s) => {
+        message += " 🔥 ¡Racha completada: " + s.name + "! +" + s.reward_points + " puntos para " + kid.name + ".";
+      });
+    }
+    return { message };
   }
 
   if (method === "GET" && path === "/parent/quests") {
@@ -1000,7 +1075,8 @@ function handle(state, method, path, body) {
   }
 
   // La decisión del adulto es definitiva y define el pago:
-  // ✅ hecha correctamente 100% · 🟡 hecha a medias 25% · ❌ no realizada -50%.
+  // ✅ hecha correctamente 100% · 🟡 hecha a medias 25% · ❌ no realizada -50%
+  // · 🚫 no aplica 0 puntos (sin transacción y sin afectar rachas).
   if (method === "POST" && (m = path.match(/^\/parent\/claims\/([^/]+)$/))) {
     const parent = requireParent(state);
     const claim = state.claims.find((c) => c.id === m[1]);
@@ -1015,7 +1091,9 @@ function handle(state, method, path, body) {
       claim.awarded = quest ? quest.points : 0;
       claim.decided_at = nowISO();
       if (quest && kid) {
-        addTxn(state, kid, quest.points, quest.title, "quest", parent.name);
+        const t = addTxn(state, kid, quest.points, quest.title, "quest", parent.name);
+        t.origin = claim.completed_by || "kid";
+        t.origin_name = claim.completed_by === "parent" ? parent.name : kid.name;
         if (quest.repeat === "once") quest.completed_once = true;
       }
       message = "✅ Hecha correctamente: " + (kid ? kid.name : "el niño") +
@@ -1027,7 +1105,9 @@ function handle(state, method, path, body) {
       claim.awarded = awarded;
       claim.decided_at = nowISO();
       if (quest && kid) {
-        addTxn(state, kid, awarded, quest.title + " (hecha a medias)", "partial", parent.name);
+        const t = addTxn(state, kid, awarded, quest.title + " (hecha a medias)", "partial", parent.name);
+        t.origin = claim.completed_by || "kid";
+        t.origin_name = claim.completed_by === "parent" ? parent.name : kid.name;
         if (quest.repeat === "once") quest.completed_once = true;
       }
       message = "🟡 Hecha a medias: " + (kid ? kid.name : "el niño") +
@@ -1040,15 +1120,26 @@ function handle(state, method, path, body) {
       claim.decided_at = nowISO();
       if (quest && kid) {
         state.misses.push({ id: newId(state), quest_id: quest.id, kid_id: kid.id, period: claim.period, penalty, at: nowISO() });
-        addTxn(state, kid, -penalty, "'" + quest.title + "' no realizada (dijo que la hizo)", "missed", parent.name);
+        const t = addTxn(state, kid, -penalty, "'" + quest.title + "' no realizada (dijo que la hizo)", "missed", parent.name);
+        t.origin = "parent"; t.origin_name = parent.name;
       }
       message = "❌ No realizada: se descontaron " + penalty + " puntos a " +
         (kid ? kid.name : "el niño") + " (50%).";
+    } else if (body.decision === "not_applicable") {
+      // 🚫 No aplica: cuarto resultado independiente — 0 puntos, sin
+      // penalización, sin transacción y sin afectar rachas.
+      claim.status = "not_applicable";
+      claim.decision = "not_applicable";
+      claim.decided_at = nowISO();
+      claim.comment = String(body.comment || "").trim().slice(0, 140) || null;
+      message = "🚫 No aplica: '" + (quest ? quest.title : "la quest") +
+        "' quedó cerrada sin puntos ni penalización para " +
+        (kid ? kid.name : "el niño") + (claim.comment ? " (" + claim.comment + ")" : "") + ".";
     } else {
       throw new ApiError("Decisión no válida.");
     }
     // Las rachas reaccionan a la decisión (solo el 100% suma; la no realizada
-    // rompe las de días consecutivos).
+    // rompe las de días consecutivos; a medias y no aplica no cuentan ni rompen).
     if (quest && kid) {
       const awards = applyStreaksOnDecision(state, kid, quest, body.decision, claim);
       awards.forEach((s) => {

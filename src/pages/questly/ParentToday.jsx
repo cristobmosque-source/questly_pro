@@ -6,12 +6,13 @@ import { ErrorView, Loading } from "@/components/questly/ApiState";
 import ConfirmDialog from "@/components/questly/ConfirmDialog";
 import StateChip from "@/components/questly/StateChip";
 import DayQuestList from "@/components/questly/DayQuestList";
+import PastInstanceActions from "@/components/questly/PastInstanceActions";
 import { api, fmtDateLabel, fmtPoints, notifyPointsChanged } from "@/lib/questlyApi";
 import { repeatLabel } from "@/lib/questlyData";
 
-// Vista de AYER y HOY por niño. Las instancias de ayer que quedaron sin hacer
-// vencen solas (❌); el adulto decide si aplica la penalización del 50% — una
-// sola vez por instancia (quest + niño + fecha).
+// Vista de AYER y HOY por niño. Las instancias pasadas sin registrar NO se
+// penalizan solas: el adulto decide — marcar como hecha (✅/🟡), penalizar
+// (❌ -50%) o no aplica (🚫) — una sola vez por instancia (quest + niño + fecha).
 export default function ParentToday() {
   const { toast } = useToast();
   const [data, setData] = useState(null);
@@ -58,7 +59,7 @@ export default function ParentToday() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-extrabold">Ayer y hoy</h1>
-        <p className="text-sm text-muted-foreground">Cierra el día: penaliza las que no se hicieron.</p>
+        <p className="text-sm text-muted-foreground">Resuelve los olvidos: marcar como hecha, penalizar o no aplica.</p>
       </div>
 
       <section>
@@ -83,11 +84,7 @@ export default function ParentToday() {
                 items={items}
                 actions={(q) =>
                   q.state === "missed" && !q.penalty_applied ? (
-                    <Button size="sm" variant="outline" disabled={busy}
-                      className="text-rose-600 border-rose-200 hover:bg-rose-50 hover:text-rose-700"
-                      onClick={() => setTarget({ quest: q, kid, date: data.yesterday_date })}>
-                      <CalendarX2 className="h-4 w-4 mr-1" /> Penalizar -{fmtPoints(q.penalty)}
-                    </Button>
+                    <PastInstanceActions item={q} kid={kid} date={data.yesterday_date} onDone={load} />
                   ) : q.state === "missed" && q.penalty_applied ? (
                     <span className="text-xs font-semibold text-rose-500">-{fmtPoints(q.penalty)} aplicado</span>
                   ) : null

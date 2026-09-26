@@ -90,11 +90,13 @@ export default function KidHome() {
   const waiting = quests.filter((q) => q.state === "pending");
   const done = quests.filter((q) => q.state === "done");
   const missed = quests.filter((q) => q.state === "missed");
+  const naToday = quests.filter((q) => q.state === "not_applicable");
 
   const yDone = yesterday.items.filter((i) => i.state === "done");
   const yPending = yesterday.items.filter((i) => i.state === "pending");
   const yRejected = yesterday.items.filter((i) => i.state === "rejected");
   const yMissed = yesterday.items.filter((i) => i.state === "missed");
+  const yNA = yesterday.items.filter((i) => i.state === "not_applicable");
   const yTotal = yesterday.items.length;
 
   const YesterdayGroup = ({ label, items, emoji }) => (
@@ -128,6 +130,7 @@ export default function KidHome() {
           {yDone.length ? <YesterdayGroup label="Hechas" emoji="✅" items={yDone} /> : null}
           {yPending.length ? <YesterdayGroup label="Por revisar" emoji="⏳" items={yPending} /> : null}
           {yRejected.length ? <YesterdayGroup label="Rechazadas" emoji="🚫" items={yRejected} /> : null}
+          {yNA.length ? <YesterdayGroup label="No aplica" emoji="➖" items={yNA} /> : null}
           {yMissed.length ? <YesterdayGroup label="No realizadas" emoji="❌" items={yMissed} /> : null}
         </section>
       ) : null}
@@ -175,6 +178,11 @@ export default function KidHome() {
             <QuestCard key={q.id} quest={q} onClaim={claim} onRetract={retract} onToggleStep={toggleStep} busy={busy} />
           ))}
         </div>
+
+        {naToday.length ? (
+          <p className="font-bold text-sm mt-5 mb-3">No aplica hoy 🚫</p>
+        ) : null}
+        {naToday.length ? <DayQuestList items={naToday} /> : null}
 
         {!quests.length ? (
           <div className="rounded-3xl bg-white border border-slate-100 shadow-sm p-10 text-center">
