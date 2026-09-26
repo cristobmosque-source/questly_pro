@@ -12,6 +12,7 @@ import EntryScreen from '@/pages/questly/EntryScreen';
 import KidHome from '@/pages/questly/KidHome';
 import KidShop from '@/pages/questly/KidShop';
 import KidHistory from '@/pages/questly/KidHistory';
+import KidProfile from '@/pages/questly/KidProfile';
 import ParentDashboard from '@/pages/questly/ParentDashboard';
 import ParentToday from '@/pages/questly/ParentToday';
 import ParentQuests from '@/pages/questly/ParentQuests';
@@ -56,6 +57,7 @@ const AuthenticatedApp = () => {
         <Route path="/kid" element={<KidHome />} />
         <Route path="/kid/shop" element={<KidShop />} />
         <Route path="/kid/history" element={<KidHistory />} />
+        <Route path="/kid/profile" element={<KidProfile />} />
       </Route>
       <Route element={<ParentShell />}>
         <Route path="/parent" element={<ParentDashboard />} />

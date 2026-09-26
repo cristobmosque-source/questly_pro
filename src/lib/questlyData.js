@@ -31,6 +31,7 @@ export const REPEAT_OPTIONS = [
 export const KIND_LABELS = {
   quest: "Quest",
   partial: "Hecha a medias",
+  streak: "Racha",
   redeem: "Recompensa",
   award: "Puntos dados",
   deduct: "Puntos quitados",

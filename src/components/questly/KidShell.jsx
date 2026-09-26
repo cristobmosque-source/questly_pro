@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Navigate, NavLink, Outlet, useNavigate } from "react-router-dom";
-import { Gift, History, Home, LogOut } from "lucide-react";
+import { Gift, History, Home, LogOut, User } from "lucide-react";
 import { api, clearSession, fmtMoney, fmtPoints, getSessionUser, notifyPointsChanged } from "@/lib/questlyApi";
 import { cn } from "@/lib/utils";
 
@@ -8,6 +8,7 @@ const NAV = [
   { to: "/kid", label: "Inicio", icon: Home, end: true },
   { to: "/kid/shop", label: "Tienda", icon: Gift },
   { to: "/kid/history", label: "Historial", icon: History },
+  { to: "/kid/profile", label: "Perfil", icon: User },
 ];
 
 // Layout del niño: cabecera con su color propio, puntos en vivo y navegación
@@ -72,7 +73,7 @@ export default function KidShell() {
       </main>
 
       <nav className="fixed bottom-0 inset-x-0 z-40 bg-white/90 backdrop-blur border-t border-slate-200">
-        <div className="max-w-3xl mx-auto grid grid-cols-3">
+        <div className="max-w-3xl mx-auto grid grid-cols-4">
           {NAV.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}

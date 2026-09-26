@@ -137,6 +137,13 @@ export function resetStore() {
   try { localStorage.removeItem(KEY); localStorage.removeItem(LEGACY_KEY); } catch { /* nada */ }
 }
 
+// Solo para pruebas internas: modifica el almacén en crudo.
+export function _mutateStore(mut) {
+  const state = load();
+  mut(state);
+  save(state);
+}
+
 // ---------------------------------------------------------------------------
 // helpers de tiempo — todo en la zona horaria America/Santiago
 // ---------------------------------------------------------------------------

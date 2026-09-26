@@ -1,4 +1,4 @@
-// Sesión compartida por ambos modos (demo y servidor Flask).
+// Sesión de Questly: token y usuario actual.
 const TOKEN_KEY = "questly_token";
 const USER_KEY = "questly_user";
 

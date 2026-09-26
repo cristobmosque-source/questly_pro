@@ -3,9 +3,12 @@ import { Link } from "react-router-dom";
 import { Gift, Star, Target } from "lucide-react";
 import confetti from "canvas-confetti";
 import { useToast } from "@/components/ui/use-toast";
+import { Button } from "@/components/ui/button";
 import { ErrorView, Loading } from "@/components/questly/ApiState";
 import QuestCard from "@/components/questly/QuestCard";
 import DayQuestList from "@/components/questly/DayQuestList";
+import KidStreaks from "@/components/questly/KidStreaks";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { api, fmtDateLabel, fmtMoney, fmtPoints, kidGreeting, notifyApprovalsChanged, notifyPointsChanged } from "@/lib/questlyApi";
 
 // Inicio del niño: saludo con puntos y su equivalente en pesos, resumen de
@@ -15,11 +18,18 @@ export default function KidHome() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [celebrations, setCelebrations] = useState(null);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      setData(await api("/kid/home"));
+      const res = await api("/kid/home");
+      setData(res);
+      // rachas recién completadas: confeti + celebración
+      if (res.celebrations && res.celebrations.length) {
+        confetti({ particleCount: 160, spread: 100, origin: { y: 0.6 }, colors: ["#f97316", "#fbbf24", "#7c3aed"] });
+        setCelebrations(res.celebrations);
+      }
     } catch (e) {
       setError(e);
     }
@@ -121,6 +131,8 @@ export default function KidHome() {
           {yMissed.length ? <YesterdayGroup label="No realizadas" emoji="❌" items={yMissed} /> : null}
         </section>
       ) : null}
+
+      <KidStreaks streaks={data.streaks || []} color={kidColor} />
 
       <section>
         <div className="flex items-baseline gap-2 flex-wrap mb-3">
@@ -228,6 +240,22 @@ export default function KidHome() {
           {!history.length ? <li className="py-3 text-sm text-muted-foreground text-center">Todavía sin movimientos.</li> : null}
         </ul>
       </section>
+      <Dialog open={!!celebrations} onOpenChange={(o) => { if (!o) setCelebrations(null); }}>
+        <DialogContent className="text-center">
+          <DialogTitle className="text-2xl font-extrabold">🔥 ¡Racha completada!</DialogTitle>
+          <div className="mt-2 space-y-3">
+            {(celebrations || []).map((c, i) => (
+              <div key={i} className="rounded-2xl bg-orange-50 border border-orange-100 p-3">
+                <p className="font-bold">{c.emoji} {c.name}</p>
+                <p className="text-amber-600 font-extrabold">⭐ +{fmtPoints(c.reward_points)} puntos</p>
+              </div>
+            ))}
+          </div>
+          <Button className="mt-3 w-full font-bold" onClick={() => setCelebrations(null)}>
+            ¡Genial!
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

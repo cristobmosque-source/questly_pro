@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/dialog";
 import { ErrorView, Loading } from "@/components/questly/ApiState";
 import ConfirmDialog from "@/components/questly/ConfirmDialog";
+import StreaksPanel from "@/components/questly/StreaksPanel";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/questlyApi";
 
 const STOCK_MODES = [
@@ -177,14 +179,23 @@ export default function ParentRewards() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-extrabold">Recompensas</h1>
-        <Button onClick={() => setEditing("new")} className="font-bold">
-          <Plus className="h-4 w-4 mr-1" /> Nueva recompensa
-        </Button>
-      </div>
+      <Tabs defaultValue="rewards" className="space-y-6">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h1 className="text-2xl font-extrabold">Recompensas</h1>
+        </div>
+        <TabsList className="w-full max-w-xs grid grid-cols-2">
+          <TabsTrigger value="rewards">🎁 Recompensas</TabsTrigger>
+          <TabsTrigger value="streaks">🔥 Rachas</TabsTrigger>
+        </TabsList>
 
-      <ul className="space-y-3">
+        <TabsContent value="rewards" className="space-y-6 focus-visible:outline-none">
+          <div className="flex items-center justify-end">
+            <Button onClick={() => setEditing("new")} className="font-bold">
+              <Plus className="h-4 w-4 mr-1" /> Nueva recompensa
+            </Button>
+          </div>
+
+          <ul className="space-y-3">
         {rewards.map((r) => (
           <li key={r.id} className={"rounded-2xl bg-white border border-slate-100 shadow-sm p-4 flex items-center gap-3 flex-wrap " + (r.active ? "" : "opacity-60")}>
             <span className="h-11 w-11 rounded-xl bg-violet-50 grid place-items-center text-2xl">{r.emoji}</span>
@@ -209,12 +220,18 @@ export default function ParentRewards() {
             </div>
           </li>
         ))}
-        {!rewards.length ? (
-          <li className="rounded-2xl bg-white border border-slate-100 shadow-sm p-8 text-center text-sm text-muted-foreground">
-            La tienda está vacía. Agrega la primera recompensa.
-          </li>
-        ) : null}
-      </ul>
+            {!rewards.length ? (
+              <li className="rounded-2xl bg-white border border-slate-100 shadow-sm p-8 text-center text-sm text-muted-foreground">
+                La tienda está vacía. Agrega la primera recompensa.
+              </li>
+            ) : null}
+          </ul>
+        </TabsContent>
+
+        <TabsContent value="streaks" className="focus-visible:outline-none">
+          <StreaksPanel />
+        </TabsContent>
+      </Tabs>
 
       <Dialog open={!!editing} onOpenChange={(o) => { if (!o) setEditing(null); }}>
         <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">

@@ -82,6 +82,15 @@ export default function ParentDashboard() {
         <Link to="/parent/today" className="text-sm font-semibold text-violet-700">Ver ayer y hoy →</Link>
       </div>
 
+      {data.pin_requests?.length ? (
+        <Link to="/parent/settings"
+          className="block rounded-2xl bg-amber-50 border border-amber-200 p-4 text-sm font-semibold text-amber-800 hover:bg-amber-100 transition-colors">
+          🔔 {data.pin_requests.map((r) => r.kid_name).join(", ")}{" "}
+          {data.pin_requests.length === 1 ? "solicitó" : "solicitaron"} restablecer su PIN —
+          revísalo en Configuración → Seguridad.
+        </Link>
+      ) : null}
+
       <section className="grid gap-4 sm:grid-cols-2">
         {data.kids.map((kid) => {
           const form = awards[kid.id] || {};

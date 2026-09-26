@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ErrorView, Loading } from "@/components/questly/ApiState";
-import { api, isDemoMode, setSession } from "@/lib/questlyApi";
+import { api, setSession } from "@/lib/questlyApi";
 
 // Pantalla de entrada: ¿quién eres? Perfiles de niños (con PIN) y del adulto,
 // o configuración inicial la primera vez.
@@ -20,7 +20,6 @@ export default function EntryScreen() {
   const [parentForm, setParentForm] = useState({ email: "", password: "" });
   const [setupForm, setSetupForm] = useState({ name: "", email: "", password: "", confirm: "" });
   const [formError, setFormError] = useState("");
-  const demo = isDemoMode();
 
   const load = useCallback(async () => {
     setError(null);
@@ -177,11 +176,6 @@ export default function EntryScreen() {
               </p>
             ) : null}
 
-            {demo ? (
-              <p className="mt-6 text-center text-xs text-muted-foreground">
-                Modo demo · Samuel PIN <code className="font-mono">1234</code> · Lorenza PIN <code className="font-mono">5678</code> · Adulto: <code className="font-mono">admin</code>
-              </p>
-            ) : null}
           </>
         ) : null}
 
@@ -225,15 +219,8 @@ export default function EntryScreen() {
           <form onSubmit={submitParent} className="mt-10 space-y-3 bg-white rounded-3xl border border-slate-100 shadow-sm p-6">
             <h2 className="font-bold text-lg">Entrar como {boot.parent?.name || "adulto"}</h2>
             {formError ? <p className="text-sm text-rose-600">{formError}</p> : null}
-            {!demo ? (
-              <div className="space-y-1.5">
-                <Label htmlFor="p-email">Correo electrónico</Label>
-                <Input id="p-email" type="email" required value={parentForm.email}
-                  onChange={(e) => setParentForm({ ...parentForm, email: e.target.value })} />
-              </div>
-            ) : null}
             <div className="space-y-1.5">
-              <Label htmlFor="p-pass">Contraseña{demo ? " (demo: admin)" : ""}</Label>
+              <Label htmlFor="p-pass">Contraseña</Label>
               <Input id="p-pass" type="password" required value={parentForm.password}
                 onChange={(e) => setParentForm({ ...parentForm, password: e.target.value })} />
             </div>
