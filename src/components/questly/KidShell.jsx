@@ -21,7 +21,13 @@ export default function KidShell() {
 
   useEffect(() => {
     let alive = true;
-    const refresh = async () => {
+    const refresh = async (evt) => {
+      // Si el evento ya trae los puntos frescos (p. ej. tras marcar una quest),
+      // se usan directamente: cero peticiones extra al servidor.
+      if (evt && typeof evt.detail?.points === "number") {
+        if (alive) setPoints(evt.detail.points);
+        return;
+      }
       try {
         const data = await api("/me");
         if (alive) setPoints(data.user.points);

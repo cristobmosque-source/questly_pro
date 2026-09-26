@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Gift, Star, Target } from "lucide-react";
 import confetti from "canvas-confetti";
@@ -37,7 +37,13 @@ export default function KidHome() {
 
   useEffect(() => { load(); }, [load]);
 
+  const inFlight = useRef(new Set());
+
   const claim = async (quest) => {
+    // Guarda por quest: un mismo botón nunca dispara dos peticiones.
+    const key = quest.assignment_id || quest.id;
+    if (inFlight.current.has(key)) return;
+    inFlight.current.add(key);
     setBusy(true);
     try {
       const res = await api(`/kid/quests/${quest.id}/claim`, {
@@ -47,10 +53,12 @@ export default function KidHome() {
       setData((d) => ({ ...d, kid: res.kid, quests: res.quests }));
       confetti({ particleCount: 90, spread: 70, origin: { y: 0.7 }, colors: [data.kid.color || "#7c4dff", "#fbbf24", "#34d399"] });
       toast({ title: "🎉 " + res.message });
-      notifyPointsChanged();
+      // Los puntos ya vienen en la respuesta: no hace falta pedirlos de nuevo.
+      notifyPointsChanged(res.kid.points);
     } catch (e) {
-      toast({ title: "Ups", description: e.message, variant: "destructive" });
+      toast({ title: "Ups", description: e.message, variant: e.rateLimit ? "default" : "destructive" });
     } finally {
+      inFlight.current.delete(key);
       setBusy(false);
     }
   };
