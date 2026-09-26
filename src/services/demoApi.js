@@ -1,14 +1,17 @@
 // MODO DEMO — backend completo sobre localStorage que reproduce las reglas de
-// negocio de questly/app/models.py: períodos (día/semana/mes), claims con
-// aprobación, penalización "missed" del 50%, stock de recompensas, metas de
-// ahorro y transacciones. Expone exactamente la misma interfaz que el API
-// Flask, para que los componentes no sepan cuál se está usando.
+// negocio de questly/app: instancias por fecha (AYER/HOY) para quests diarias
+// y custom_days, cierre automático de instancias vencidas ("no realizada"),
+// penalización del 50% única por instancia, aprobación de claims, stock de
+// recompensas, metas de ahorro y transacciones. Zona horaria: America/Santiago.
+// Expone exactamente la misma interfaz que el API Flask, para que los
+// componentes no sepan cuál se está usando.
 
 import { ApiError } from "@/services/error";
 import { getToken } from "@/services/session";
 
-const KEY = "questly_demo_v1";
+const KEY = "questly_demo_v2";
 const DELAY_MS = 90; // latencia simulada para que se vean los estados de carga
+const TZ = "America/Santiago";
 
 // ---------------------------------------------------------------------------
 // estado y persistencia
@@ -16,29 +19,49 @@ const DELAY_MS = 90; // latencia simulada para que se vean los estados de carga
 
 function seedState() {
   return {
-    seq: 1000,
+    seq: 100,
     parent: { id: "p1", name: "Papá / CMB", avatar: "👨", password: "admin" },
     kids: [
-      { id: "k1", name: "Samuel", avatar: "🐼", color: "#2563eb", pin: "1234", points: 120, lifetime_points: 120, goal_id: null },
-      { id: "k2", name: "Lorenza", avatar: "🦄", color: "#d946ef", pin: "5678", points: 85, lifetime_points: 85, goal_id: null },
+      { id: "k1", name: "Samuel", avatar: "🐼", color: "#2563eb", pin: "1234", points: 8500, lifetime_points: 8500, goal_id: null },
+      { id: "k2", name: "Lorenza", avatar: "🦄", color: "#d946ef", pin: "5678", points: 6250, lifetime_points: 6750, goal_id: null },
     ],
     quests: [
-      { id: "q1", title: "Hacer la cama", emoji: "🛏️", description: "", points: 5, repeat: "daily", repeat_days: [], times_per_period: 1, assigned_to: ["k1"], subtasks: [], active: true },
-      { id: "q2", title: "Lavarse los dientes", emoji: "🦷", description: "Antes de dormir, sin excusas", points: 5, repeat: "daily", repeat_days: [], times_per_period: 1, assigned_to: ["k2"], subtasks: [], active: true },
-      { id: "q3", title: "Ordenar habitación", emoji: "🧹", description: "", points: 10, repeat: "custom_days", repeat_days: [0, 1, 2, 3, 4], times_per_period: 1, assigned_to: ["k1"], subtasks: [], active: true },
-      { id: "q4", title: "Sacar la basura", emoji: "🗑️", description: "", points: 15, repeat: "custom_days", repeat_days: [1, 3, 5], times_per_period: 1, assigned_to: ["k2"], subtasks: [], active: true },
-      { id: "q5", title: "Ordenar el clóset", emoji: "📦", description: "Toda la ropa en su lugar", points: 30, repeat: "once", repeat_days: [], times_per_period: 1, assigned_to: ["k1"], subtasks: [], active: true, due_date: "2026-09-28" },
-      { id: "q6", title: "Limpiar patio", emoji: "🌿", description: "", points: 20, repeat: "weekly", repeat_days: [], times_per_period: 1, assigned_to: [], subtasks: [], active: true },
+      { id: "q1", title: "Hacer la cama", emoji: "🛏️", description: "", points: 500, repeat: "daily", repeat_days: [], times_per_period: 1, assigned_to: ["k1", "k2"], subtasks: [], active: true },
+      { id: "q2", title: "Ordenar habitación", emoji: "🧹", description: "", points: 1000, repeat: "custom_days", repeat_days: [0, 1, 2, 3, 4], times_per_period: 1, assigned_to: ["k1", "k2"], subtasks: [], active: true },
+      { id: "q3", title: "Sacar la basura", emoji: "🗑️", description: "", points: 750, repeat: "custom_days", repeat_days: [1, 3], times_per_period: 1, assigned_to: ["k2"], subtasks: [], active: true },
+      { id: "q4", title: "Ordenar el clóset", emoji: "🧺", description: "Toda la ropa en su lugar", points: 3000, repeat: "once", repeat_days: [], times_per_period: 1, assigned_to: ["k1"], subtasks: [], active: true, due_date: "2026-10-03" },
+      { id: "q5", title: "Limpiar el patio", emoji: "🌿", description: "", points: 2000, repeat: "custom_days", repeat_days: [5], times_per_period: 1, assigned_to: ["k1", "k2"], subtasks: [], active: true },
+      { id: "q6", title: "Hacer ejercicio", emoji: "🏃", description: "15 minutos mínimo", points: 800, repeat: "custom_days", repeat_days: [0, 2, 4], times_per_period: 1, assigned_to: ["k1"], subtasks: [], active: true },
     ],
     rewards: [
-      { id: "r1", title: "Helado", emoji: "🍦", cost: 50, description: "El sabor que quieras", stock_mode: "unlimited", stock: 0, stock_limit: 1, stock_period: "daily", stock_scope: "child", active: true },
-      { id: "r2", title: "Jugar videojuegos", emoji: "🎮", cost: 100, description: "Una hora extra", stock_mode: "unlimited", stock: 0, stock_limit: 1, stock_period: "daily", stock_scope: "child", active: true },
-      { id: "r3", title: "Elegir película", emoji: "🎬", cost: 150, description: "La película familiar la eliges tú", stock_mode: "unlimited", stock: 0, stock_limit: 1, stock_period: "daily", stock_scope: "child", active: true },
+      { id: "r1", title: "Helado", emoji: "🍦", cost: 500, description: "El sabor que quieras", stock_mode: "unlimited", stock: 0, stock_limit: 1, stock_period: "daily", stock_scope: "child", active: true },
+      { id: "r2", title: "Jugar videojuegos", emoji: "🎮", cost: 1000, description: "Una hora extra", stock_mode: "unlimited", stock: 0, stock_limit: 1, stock_period: "daily", stock_scope: "child", active: true },
+      { id: "r3", title: "Elegir película", emoji: "🎬", cost: 1500, description: "La película familiar la eliges tú", stock_mode: "unlimited", stock: 0, stock_limit: 1, stock_period: "daily", stock_scope: "child", active: true },
+      { id: "r4", title: "Salida al cine", emoji: "🎟️", cost: 10000, description: "Una entrada con palomitas", stock_mode: "unlimited", stock: 0, stock_limit: 1, stock_period: "daily", stock_scope: "child", active: true },
     ],
-    claims: [],       // {id, quest_id, kid_id, period, status, at, decided_at}
-    misses: [],       // {id, quest_id, kid_id, period, penalty, at}
-    steps: [],        // {quest_id, kid_id, period, subtask_id}
-    txns: [],         // {id, kid_id, delta, reason, kind, at, actor, balance_after}
+    // instancias por fecha (d:YYYY-MM-DD); semanal/mensual/once usan su propio bucket
+    claims: [
+      { id: "c1", quest_id: "q1", kid_id: "k1", period: "d:2026-09-24", date: "2026-09-24", status: "approved", at: "2026-09-24T19:30:00.000Z", decided_at: "2026-09-24T19:35:00.000Z" },
+      { id: "c2", quest_id: "q1", kid_id: "k1", period: "d:2026-09-25", date: "2026-09-25", status: "approved", at: "2026-09-25T08:10:00.000Z", decided_at: "2026-09-25T08:20:00.000Z" },
+      { id: "c3", quest_id: "q2", kid_id: "k1", period: "d:2026-09-25", date: "2026-09-25", status: "approved", at: "2026-09-25T09:00:00.000Z", decided_at: "2026-09-25T09:10:00.000Z" },
+      { id: "c4", quest_id: "q1", kid_id: "k2", period: "d:2026-09-25", date: "2026-09-25", status: "approved", at: "2026-09-25T08:05:00.000Z", decided_at: "2026-09-25T08:15:00.000Z" },
+      { id: "c5", quest_id: "q3", kid_id: "k2", period: "d:2026-09-24", date: "2026-09-24", status: "approved", at: "2026-09-24T18:45:00.000Z", decided_at: "2026-09-24T18:50:00.000Z" },
+    ],
+    // una penalización por instancia (quest_id + kid_id + period)
+    misses: [
+      { id: "m1", quest_id: "q2", kid_id: "k2", period: "d:2026-09-25", penalty: 500, at: "2026-09-25T09:15:00.000Z" },
+    ],
+    steps: [],         // {quest_id, kid_id, period, subtask_id}
+    txns: [
+      { id: "t1", kid_id: "k1", delta: 6500, reason: "Puntos de bienvenida", kind: "award", at: "2026-09-20T10:00:00.000Z", actor: "Papá / CMB", balance_after: 6500 },
+      { id: "t5", kid_id: "k2", delta: 5500, reason: "Puntos de bienvenida", kind: "award", at: "2026-09-20T10:05:00.000Z", actor: "Papá / CMB", balance_after: 5500 },
+      { id: "t6", kid_id: "k2", delta: 750, reason: "Sacar la basura", kind: "quest", at: "2026-09-24T18:50:00.000Z", actor: "Papá / CMB", balance_after: 6250 },
+      { id: "t2", kid_id: "k1", delta: 500, reason: "Hacer la cama", kind: "quest", at: "2026-09-24T19:35:00.000Z", actor: "Papá / CMB", balance_after: 7000 },
+      { id: "t4", kid_id: "k2", delta: 500, reason: "Hacer la cama", kind: "quest", at: "2026-09-25T08:15:00.000Z", actor: "Papá / CMB", balance_after: 6750 },
+      { id: "t3", kid_id: "k1", delta: 500, reason: "Hacer la cama", kind: "quest", at: "2026-09-25T08:20:00.000Z", actor: "Papá / CMB", balance_after: 7500 },
+      { id: "t8", kid_id: "k2", delta: -500, reason: "'Ordenar habitación' no realizada (vie 25 sept)", kind: "missed", at: "2026-09-25T09:15:00.000Z", actor: "Papá / CMB", balance_after: 6250 },
+      { id: "t7", kid_id: "k1", delta: 1000, reason: "Ordenar habitación", kind: "quest", at: "2026-09-25T09:10:00.000Z", actor: "Papá / CMB", balance_after: 8500 },
+    ],
     redemptions: [],  // {id, reward_id, kid_id, title, emoji, cost, status, at, decided_at}
     sessions: {},     // token -> {user_id, role}
   };
@@ -50,7 +73,8 @@ function load() {
   if (cache) return cache;
   try {
     const raw = localStorage.getItem(KEY);
-    cache = raw ? JSON.parse(raw) : seedState();
+    const parsed = raw ? JSON.parse(raw) : null;
+    cache = parsed && parsed.txns ? parsed : seedState();
   } catch {
     cache = seedState();
   }
@@ -71,43 +95,51 @@ export function restoreDemoData() {
 }
 
 // ---------------------------------------------------------------------------
-// helpers de tiempo (fechas locales, como el backend)
+// helpers de tiempo — todo en la zona horaria America/Santiago
 // ---------------------------------------------------------------------------
 
 const nowISO = () => new Date().toISOString();
 const round1 = (n) => Math.round(Number(n) * 10) / 10;
 
-function ymd(d) {
-  return d.getFullYear() + "-" +
-    String(d.getMonth() + 1).padStart(2, "0") + "-" +
-    String(d.getDate()).padStart(2, "0");
+const dateFmt = new Intl.DateTimeFormat("en-CA", {
+  timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit",
+});
+
+// fecha local (Santiago) en formato YYYY-MM-DD
+const ymd = (d = new Date()) => dateFmt.format(d);
+
+function addDaysStr(dateStr, n) {
+  return ymd(new Date(Date.parse(dateStr + "T12:00:00Z") + n * 86400000));
 }
 
-function monday(d) {
-  const c = new Date(d);
-  c.setDate(c.getDate() - ((c.getDay() + 6) % 7));
-  return c;
-}
+const todayStr = () => ymd(new Date());
+const yesterdayStr = () => addDaysStr(todayStr(), -1);
 
-const questlyWeekday = (d) => (d.getDay() + 6) % 7; // 0 = lunes … 6 = domingo
+// 0 = lunes … 6 = domingo (convención de Questly)
+const questlyWeekday = (dateStr) => (new Date(dateStr + "T12:00:00Z").getUTCDay() + 6) % 7;
 
-function periodFor(quest, d) {
+const mondayStr = (dateStr) => addDaysStr(dateStr, -questlyWeekday(dateStr));
+
+function periodFor(quest, dateStr) {
   switch (quest.repeat) {
     case "daily":
     case "custom_days":
-      return "d:" + ymd(d);
+      return "d:" + dateStr;
     case "weekly":
-      return "w:" + ymd(monday(d));
+      return "w:" + mondayStr(dateStr);
     case "monthly":
-      return "m:" + ymd(d).slice(0, 7);
+      return "m:" + dateStr.slice(0, 7);
     default:
       return "once";
   }
 }
 
-function dueToday(quest, d) {
+// ¿la quest tiene una instancia concreta para cada fecha en que toca?
+const isDateInstance = (quest) => quest.repeat === "daily" || quest.repeat === "custom_days";
+
+function dueOn(quest, dateStr) {
   if (!quest.active) return false;
-  if (quest.repeat === "custom_days") return (quest.repeat_days || []).includes(questlyWeekday(d));
+  if (quest.repeat === "custom_days") return (quest.repeat_days || []).includes(questlyWeekday(dateStr));
   if (quest.repeat === "once") return !quest.completed_once;
   return true; // daily, weekly, monthly
 }
@@ -117,6 +149,12 @@ const assignedTo = (quest, kidId) =>
 
 const periodLabel = (repeat) =>
   repeat === "weekly" ? "esta semana" : repeat === "monthly" ? "este mes" : "hoy";
+
+function dateLabel(dateStr) {
+  const d = new Date(dateStr + "T12:00:00Z");
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString("es-CL", { weekday: "short", day: "numeric", month: "short" });
+}
 
 // ---------------------------------------------------------------------------
 // helpers de dominio
@@ -142,35 +180,65 @@ function addTxn(state, kid, delta, reason, kind, actor = null) {
 const kidTxns = (state, kidId) =>
   state.txns.filter((t) => t.kid_id === kidId).sort((a, b) => (a.at < b.at ? 1 : -1));
 
-function questForKid(state, quest, kid, d) {
-  const period = periodFor(quest, d);
-  const claims = state.claims.filter((c) => c.quest_id === quest.id && c.kid_id === kid.id && c.period === period);
-  const missed = state.misses.some((m) => m.quest_id === quest.id && m.kid_id === kid.id && m.period === period);
+// Estado de la INSTANCIA de una quest en una fecha concreta:
+// open | pending | done | rejected | missed
+function instanceState(state, quest, kidId, dateStr) {
+  const period = periodFor(quest, dateStr);
+  const claims = state.claims.filter((c) => c.quest_id === quest.id && c.kid_id === kidId && c.period === period);
+  if (claims.some((c) => c.status === "pending")) return "pending";
   const approved = claims.filter((c) => c.status === "approved").length;
-  const pending = claims.some((c) => c.status === "pending");
+  if (approved >= quest.times_per_period) return "done";
+  if (state.misses.some((m) => m.quest_id === quest.id && m.kid_id === kidId && m.period === period)) return "missed";
+  if (claims.some((c) => c.status === "rejected")) return "rejected";
+  // cierre del día: si la instancia era hoy y ya pasó, venció
+  if (isDateInstance(quest) && dateStr < todayStr()) return "missed";
+  return "open";
+}
+
+const penaltyApplied = (state, quest, kidId, dateStr) =>
+  state.misses.some((m) => m.quest_id === quest.id && m.kid_id === kidId && m.period === periodFor(quest, dateStr));
+
+function questForKid(state, quest, kid, dateStr) {
+  const period = periodFor(quest, dateStr);
+  const claims = state.claims.filter((c) => c.quest_id === quest.id && c.kid_id === kid.id && c.period === period);
   const subtasks = quest.subtasks.map((s) => ({
     id: s.id,
     text: s.text,
     done: state.steps.some((t) => t.quest_id === quest.id && t.kid_id === kid.id && t.period === period && t.subtask_id === s.id),
   }));
   const stepsDone = subtasks.filter((s) => s.done).length;
-  let st = "open";
-  if (missed) st = "missed";
-  else if (pending) st = "pending";
-  else if (approved >= quest.times_per_period) st = "done";
   return {
     id: quest.id, title: quest.title, emoji: quest.emoji, description: quest.description,
     points: quest.points, repeat: quest.repeat, repeat_days: quest.repeat_days || [],
     limit: quest.times_per_period, used: claims.filter((c) => c.status !== "rejected").length,
     subtasks, steps_total: subtasks.length, steps_done: stepsDone,
-    state: st, penalty: round1(quest.points / 2), due_date: quest.due_date || null,
+    state: instanceState(state, quest, kid.id, dateStr),
+    penalty: round1(quest.points / 2), due_date: quest.due_date || null,
   };
 }
 
-function kidQuests(state, kid, d) {
+function kidQuests(state, kid, dateStr) {
   return state.quests
-    .filter((q) => assignedTo(q, kid.id) && dueToday(q, d))
-    .map((q) => questForKid(state, q, kid, d));
+    .filter((q) => assignedTo(q, kid.id) && dueOn(q, dateStr))
+    .map((q) => questForKid(state, q, kid, dateStr));
+}
+
+// Resumen de las instancias de AYER de un niño (solo quests por fecha)
+function dayItems(state, kid, dateStr) {
+  return state.quests
+    .filter((q) => isDateInstance(q) && assignedTo(q, kid.id) && dueOn(q, dateStr))
+    .map((q) => ({
+      id: q.id, title: q.title, emoji: q.emoji, points: q.points,
+      penalty: round1(q.points / 2),
+      state: instanceState(state, q, kid.id, dateStr),
+      penalty_applied: penaltyApplied(state, q, kid.id, dateStr),
+    }));
+}
+
+function daySummary(state, kid, dateStr, onlyDateInstances) {
+  const items = onlyDateInstances ? dayItems(state, kid, dateStr) : kidQuests(state, kid, dateStr);
+  const count = (s) => items.filter((i) => i.state === s).length;
+  return { done: count("done"), pending: count("pending"), rejected: count("rejected"), missed: count("missed"), open: count("open") };
 }
 
 function stockText(r) {
@@ -224,8 +292,12 @@ function redemptionsPending(state) {
     .sort((a, b) => (a.at < b.at ? 1 : -1));
 }
 
-function todayRows(state, d) {
-  return state.kids.map((kid) => ({ kid: pubKid(kid), quests: kidQuests(state, kid, d) }));
+function todayRows(state, dateStr) {
+  return state.kids.map((kid) => ({ kid: pubKid(kid), quests: kidQuests(state, kid, dateStr) }));
+}
+
+function yesterdayRows(state, dateStr) {
+  return state.kids.map((kid) => ({ kid: pubKid(kid), items: dayItems(state, kid, dateStr) }));
 }
 
 // ---------------------------------------------------------------------------
@@ -275,8 +347,8 @@ function validateQuest(state, body) {
   const title = String(body.title || "").trim();
   if (!title) throw new ApiError("Ponle un título a la quest.");
   const points = Number(body.points);
-  if (!Number.isFinite(points) || points < 1 || points > 1000)
-    throw new ApiError("Los puntos deben estar entre 1 y 1000.");
+  if (!Number.isFinite(points) || points < 1 || points > 100000)
+    throw new ApiError("Los puntos deben estar entre 1 y 100000 (1000 puntos = $1.000).");
   const repeat = REPEATS.includes(body.repeat) ? body.repeat : "daily";
   let repeat_days = Array.isArray(body.repeat_days) ? body.repeat_days.filter((x) => x >= 0 && x <= 6) : [];
   if (repeat === "custom_days" && !repeat_days.length)
@@ -300,7 +372,7 @@ function validateReward(body) {
   if (!title) throw new ApiError("Ponle un nombre a la recompensa.");
   const cost = Number(body.cost);
   if (!Number.isFinite(cost) || cost < 1 || cost > 100000)
-    throw new ApiError("El costo debe estar entre 1 y 100000 puntos.");
+    throw new ApiError("El costo debe estar entre 1 y 100000 puntos (1000 puntos = $1.000).");
   const stock_mode = ["unlimited", "fixed", "periodic"].includes(body.stock_mode) ? body.stock_mode : "unlimited";
   return {
     title: title.slice(0, 80),
@@ -319,7 +391,8 @@ function validateReward(body) {
 // ---------------------------------------------------------------------------
 
 function handle(state, method, path, body) {
-  const d = new Date();
+  const tStr = todayStr();
+  const yStr = yesterdayStr();
   let m;
 
   // ----- públicos / auth ---------------------------------------------------
@@ -366,7 +439,10 @@ function handle(state, method, path, body) {
     const g = goalFor(state, kid);
     return {
       kid: pubKid(kid),
-      quests: kidQuests(state, kid, d),
+      today_date: tStr,
+      yesterday_date: yStr,
+      quests: kidQuests(state, kid, tStr),
+      yesterday: { date: yStr, items: dayItems(state, kid, yStr) },
       goal: g.goal, goal_chosen: g.chosen, goal_reached: g.reached,
       affordable: state.rewards.filter((r) => r.active && r.cost <= kid.points).map(pubReward),
       history: kidTxns(state, kid.id).slice(0, 6),
@@ -378,8 +454,8 @@ function handle(state, method, path, body) {
     const quest = state.quests.find((q) => q.id === m[1]);
     if (!quest || !quest.active) throw new ApiError("Esta quest ya no existe.");
     if (!assignedTo(quest, kid.id)) throw new ApiError("Esta quest no es tuya.");
-    if (!dueToday(quest, d)) throw new ApiError("Esta quest no toca hoy.");
-    const period = periodFor(quest, d);
+    if (!dueOn(quest, tStr)) throw new ApiError("Esta quest no toca hoy.");
+    const period = periodFor(quest, tStr);
     if (state.misses.some((x) => x.quest_id === quest.id && x.kid_id === kid.id && x.period === period))
       throw new ApiError("Esta quest quedó marcada como no realizada.");
     const claims = state.claims.filter((c) => c.quest_id === quest.id && c.kid_id === kid.id && c.period === period);
@@ -390,8 +466,8 @@ function handle(state, method, path, body) {
     const stepsDone = state.steps.filter((t) => t.quest_id === quest.id && t.kid_id === kid.id && t.period === period).length;
     if (quest.subtasks.length && stepsDone < quest.subtasks.length)
       throw new ApiError("Te faltan pasos por marcar antes de decir ¡listo!.");
-    state.claims.push({ id: newId(state), quest_id: quest.id, kid_id: kid.id, period, status: "pending", at: nowISO() });
-    return { kid: pubKid(kid), quests: kidQuests(state, kid, d), message: "¡Listo! Ahora queda esperando que un adulto la revise." };
+    state.claims.push({ id: newId(state), quest_id: quest.id, kid_id: kid.id, period, date: isDateInstance(quest) ? tStr : null, status: "pending", at: nowISO() });
+    return { kid: pubKid(kid), quests: kidQuests(state, kid, tStr), message: "¡Listo! Ahora queda esperando que un adulto la revise." };
   }
 
   if (method === "POST" && (m = path.match(/^\/kid\/quests\/([^/]+)\/step\/([^/]+)$/))) {
@@ -400,7 +476,7 @@ function handle(state, method, path, body) {
     if (!quest) throw new ApiError("Esta quest ya no existe.");
     const step = quest.subtasks.find((s) => s.id === m[2]);
     if (!step) throw new ApiError("Ese paso no existe.");
-    const period = periodFor(quest, d);
+    const period = periodFor(quest, tStr);
     const key = (t) => t.quest_id === quest.id && t.kid_id === kid.id && t.period === period && t.subtask_id === step.id;
     if (state.steps.some(key)) state.steps = state.steps.filter((t) => !key(t));
     else state.steps.push({ quest_id: quest.id, kid_id: kid.id, period, subtask_id: step.id });
@@ -429,10 +505,10 @@ function handle(state, method, path, body) {
       throw new ApiError("Te faltan " + (reward.cost - kid.points) + " puntos para canjearla.");
     if (reward.stock_mode === "periodic") {
       const bucket = (at) => {
-        const dd = new Date(at);
-        if (reward.stock_period === "daily") return "d:" + ymd(dd);
-        if (reward.stock_period === "weekly") return "w:" + ymd(monday(dd));
-        return "m:" + ymd(dd).slice(0, 7);
+        const day = ymd(new Date(at));
+        if (reward.stock_period === "daily") return "d:" + day;
+        if (reward.stock_period === "weekly") return "w:" + mondayStr(day);
+        return "m:" + day.slice(0, 7);
       };
       const nowBucket = bucket(nowISO());
       const used = state.redemptions.filter((r) => {
@@ -489,18 +565,28 @@ function handle(state, method, path, body) {
         return { ...t, reason: (kid ? kid.name + ": " : "") + t.reason };
       });
     return {
-      kids: state.kids.map(pubKid),
+      kids: state.kids.map((k) => ({
+        ...pubKid(k),
+        yesterday: daySummary(state, k, yStr, true),
+        today: daySummary(state, k, tStr, false),
+      })),
       claims: claimsPending(state),
       redemptions: redemptionsPending(state),
       pending: claimsPending(state).length + redemptionsPending(state).length,
-      today: todayRows(state, d),
+      today_date: tStr,
+      yesterday_date: yStr,
       activity,
     };
   }
 
   if (method === "GET" && path === "/parent/today") {
     requireParent(state);
-    return { rows: todayRows(state, d) };
+    return {
+      today_date: tStr,
+      yesterday_date: yStr,
+      rows: todayRows(state, tStr),
+      yesterday_rows: yesterdayRows(state, yStr),
+    };
   }
 
   if (method === "POST" && (m = path.match(/^\/parent\/quests\/([^/]+)\/missed\/([^/]+)$/))) {
@@ -509,18 +595,25 @@ function handle(state, method, path, body) {
     const kid = state.kids.find((k) => k.id === m[2]);
     if (!quest || !kid) throw new ApiError("Esa quest o ese niño ya no existen.", { status: 404 });
     if (quest.repeat === "once") throw new ApiError("Las quests de una sola vez no se marcan como no realizadas.");
-    if (!dueToday(quest, d) || !assignedTo(quest, kid.id)) throw new ApiError("Esta quest no toca hoy para este niño.");
-    const period = periodFor(quest, d);
+    const dateStr = body.date && /^\d{4}-\d{2}-\d{2}$/.test(String(body.date)) ? String(body.date) : tStr;
+    if (dateStr > tStr) throw new ApiError("No puedes marcar días que aún no llegan.");
+    if (!dueOn(quest, dateStr) || !assignedTo(quest, kid.id))
+      throw new ApiError("Esta quest no corresponde al " + dateLabel(dateStr) + " para este niño.");
+    const period = periodFor(quest, dateStr);
     if (state.claims.some((c) => c.quest_id === quest.id && c.kid_id === kid.id && c.period === period && c.status === "pending"))
       throw new ApiError("Hay una revisión pendiente de esta quest; decídela primero.");
     if (state.misses.some((x) => x.quest_id === quest.id && x.kid_id === kid.id && x.period === period))
-      throw new ApiError("Ya está marcada como no realizada " + periodLabel(quest.repeat) + ".");
+      throw new ApiError("Esta quest ya está marcada como no realizada" + (dateStr !== tStr ? " ese día" : "") + ".");
     const penalty = round1(quest.points / 2);
     state.misses.push({ id: newId(state), quest_id: quest.id, kid_id: kid.id, period, penalty, at: nowISO() });
-    addTxn(state, kid, -penalty, "'" + quest.title + "' no realizada", "missed", parent.name);
+    addTxn(state, kid, -penalty,
+      "'" + quest.title + "' no realizada" + (dateStr !== tStr ? " (" + dateLabel(dateStr) + ")" : ""),
+      "missed", parent.name);
     return {
-      rows: todayRows(state, d),
-      message: "Se descontaron " + penalty + " puntos a " + kid.name + ". La quest quedó cerrada " + periodLabel(quest.repeat) + ".",
+      rows: todayRows(state, tStr),
+      yesterday_rows: yesterdayRows(state, yStr),
+      message: "Se descontaron " + penalty + " puntos a " + kid.name +
+        ". La instancia del " + dateLabel(dateStr) + " quedó cerrada.",
     };
   }
 
@@ -662,6 +755,10 @@ function handle(state, method, path, body) {
     if (!kid) throw new ApiError("Ese niño ya no existe.", { status: 404 });
     return {
       kid: pubKid(kid),
+      today_date: tStr,
+      yesterday_date: yStr,
+      yesterday: { date: yStr, items: dayItems(state, kid, yStr) },
+      today: { date: tStr, quests: kidQuests(state, kid, tStr) },
       history: kidTxns(state, kid.id),
       redemptions: state.redemptions.filter((r) => r.kid_id === kid.id)
         .map((r) => ({ id: r.id, emoji: r.emoji, title: r.title, cost: r.cost, at: r.at, status: r.status }))
