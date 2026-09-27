@@ -7,7 +7,7 @@
 import { createClientFromRequest } from "npm:@base44/sdk@0.8.49";
 import { ApiError } from "../../shared/questlyDomain.ts";
 import { handle } from "../../shared/questlyRoutes.ts";
-import { loadState, persistState, importSnapshot } from "../../shared/questlyStore.ts";
+import { loadState, loadSessions, persistState, importSnapshot } from "../../shared/questlyStore.ts";
 
 // La plataforma limita la cantidad de lecturas de base de datos por minuto.
 // Cargar el estado completo (17 lecturas) en CADA petición agotaba esa cuota en
@@ -58,6 +58,13 @@ export default async function (req) {
     }
 
     const { state, ids } = await getState(base44);
+    // Autenticación siempre fresca: las sesiones se leen de la base de datos
+    // en cada petición (nunca de la caché), para que un login recién hecho
+    // sea válido en la petición siguiente aunque la caché todavía conserve
+    // el estado de justo antes del login.
+    const freshSessions = await loadSessions(base44);
+    state.sessions = freshSessions.sessions;
+    ids.sessions = freshSessions.ids;
     const before = structuredClone(state);
     const result = await handle(state, method, path, body, token);
     await persistState(base44, before, state, ids);

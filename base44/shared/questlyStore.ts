@@ -120,6 +120,22 @@ export async function loadState(base44) {
   return { state, ids };
 }
 
+// Las sesiones se leen SIEMPRE frescas de la base de datos, nunca de la
+// caché del servidor: si una petición llegara con un estado cacheado de
+// justo antes del login, no vería la sesión recién creada y el usuario
+// entraría directo a un "sesión expirada" aunque su login acabó de
+// funcionar. Es 1 lectura por petición: la autenticación no se cachea.
+export async function loadSessions(base44) {
+  const S = base44.asServiceRole.entities;
+  const sessions = {};
+  const ids = {};
+  for (const r of await S.QuestlySession.list("-created_date", 20000)) {
+    sessions[r.ref] = { user_id: r.user_id, role: r.role };
+    ids[r.ref] = r.id;
+  }
+  return { sessions, ids };
+}
+
 // ---------------------------------------------------------------------------
 // persistencia (diff before → after)
 // ---------------------------------------------------------------------------
