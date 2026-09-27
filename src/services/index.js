@@ -4,7 +4,7 @@
 
 import { base44 } from "@/api/base44Client";
 import { ApiError } from "@/services/error";
-import { getToken } from "@/services/session";
+import { clearSession, getToken } from "@/services/session";
 
 export { ApiError } from "@/services/error";
 export { getToken, getSessionUser, setSession, clearSession } from "@/services/session";
@@ -38,6 +38,14 @@ export async function api(path, opts = {}) {
       const message = (payload.error && payload.error.message) || "Error inesperado";
       const status = (payload.error && payload.error.status) || 500;
       if (RATE_LIMIT_RE.test(message) && attempt < 2) continue;
+      if (status === 401) {
+        // La sesión ya no es válida: se limpia el token (solo la credencial;
+        // los datos de la familia viven en el servidor y no se tocan). No se
+        // reintenta nada: el usuario entra de nuevo y todo se recarga desde
+        // la base de datos.
+        clearSession();
+        throw new ApiError("Tu sesión expiró. Entra de nuevo.", { status: 401, session: true });
+      }
       throw new ApiError(message, { status });
     }
     return payload.data;

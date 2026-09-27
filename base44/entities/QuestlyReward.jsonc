@@ -31,6 +31,12 @@
     "stock_scope": {
       "type": "string"
     },
+    "assigned_to": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "active": {
       "type": "boolean"
     }

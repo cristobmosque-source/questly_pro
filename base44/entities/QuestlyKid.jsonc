@@ -24,6 +24,12 @@
     },
     "goal_id": {
       "type": "string"
+    },
+    "goal_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     }
   },
   "required": [

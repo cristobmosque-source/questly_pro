@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { ErrorView, Loading } from "@/components/questly/ApiState";
 import DayQuestList from "@/components/questly/DayQuestList";
+import GoalsList from "@/components/questly/GoalsList";
+import KidStreaks from "@/components/questly/KidStreaks";
 import ReviewDialog from "@/components/questly/ReviewDialog";
 import HistoryList from "@/components/questly/HistoryList";
 import { api, fmtDateLabel, fmtMoney, fmtPoints, fmtWhen, notifyPointsChanged } from "@/lib/questlyApi";
@@ -124,6 +126,37 @@ export default function ParentKidDetail() {
           </div>
         </div>
       </div>
+
+      {data.goals?.length ? (
+        <section className="rounded-2xl bg-white border border-slate-100 shadow-sm p-5">
+          <h2 className="font-bold mb-3">🎯 Metas</h2>
+          <GoalsList goals={data.goals} points={kid.points} />
+        </section>
+      ) : null}
+
+      {data.rewards_available?.length ? (
+        <section className="rounded-2xl bg-white border border-slate-100 shadow-sm p-5">
+          <h2 className="font-bold mb-3">🎁 Recompensas disponibles para {kid.name}</h2>
+          <ul className="space-y-2">
+            {data.rewards_available.map((r) => (
+              <li key={r.id} className="flex items-center gap-3 text-sm flex-wrap">
+                <span className="text-xl">{r.emoji}</span>
+                <span className="flex-1 min-w-0 font-semibold truncate">{r.title}</span>
+                <span className="text-amber-600 font-bold">⭐ {fmtPoints(r.cost)}</span>
+                {kid.points >= r.cost ? (
+                  <span className="rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-bold px-2 py-0.5">puede canjearla</span>
+                ) : (
+                  <span className="rounded-full bg-slate-100 text-slate-500 text-[11px] font-bold px-2 py-0.5">faltan ⭐ {fmtPoints(r.cost - kid.points)}</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {data.streaks?.length ? (
+        <KidStreaks streaks={data.streaks} color={kid.color} title="🔥 Rachas" />
+      ) : null}
 
       {data.yesterday ? (
         <section className="rounded-2xl bg-white border border-slate-100 shadow-sm p-5">

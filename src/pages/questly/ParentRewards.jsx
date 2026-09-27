@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/components/ui/use-toast";
@@ -22,7 +23,7 @@ const STOCK_MODES = [
   { value: "periodic", label: "Cupo por período" },
 ];
 
-function RewardForm({ initial, onSubmit, submitting, submitLabel }) {
+function RewardForm({ initial, kids = [], onSubmit, submitting, submitLabel }) {
   const [form, setForm] = useState(() => ({
     title: initial?.title || "",
     emoji: initial?.emoji || "",
@@ -35,9 +36,12 @@ function RewardForm({ initial, onSubmit, submitting, submitLabel }) {
     stock_scope: initial?.stock_scope || "child",
   }));
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
+  // Niños que pueden usar esta recompensa: lista vacía = todos los niños.
+  const [assigned, setAssigned] = useState(() => initial?.assigned_to || []);
+  const allKids = !assigned.length;
 
   return (
-    <form onSubmit={(e) => { e.preventDefault(); onSubmit(form); }} className="space-y-4">
+    <form onSubmit={(e) => { e.preventDefault(); onSubmit({ ...form, assigned_to: assigned }); }} className="space-y-4">
       <div className="grid grid-cols-[1fr_4.5rem_6rem] gap-3">
         <div className="space-y-1.5">
           <Label htmlFor="r-title">Nombre</Label>
@@ -58,6 +62,32 @@ function RewardForm({ initial, onSubmit, submitting, submitLabel }) {
         <Label htmlFor="r-desc">Descripción (opcional)</Label>
         <Textarea id="r-desc" rows={2} maxLength={240}
           value={form.description} onChange={(e) => set("description")(e.target.value)} />
+      </div>
+      <div className="space-y-1.5">
+        <Label>Disponible para</Label>
+        <div className="rounded-xl border border-slate-200 p-3 space-y-2">
+          <label className="flex items-center gap-2 text-sm font-semibold cursor-pointer">
+            <Checkbox checked={allKids}
+              onCheckedChange={(c) => setAssigned(c ? [] : kids.map((k) => k.id))} />
+            Todos los niños
+          </label>
+          {!allKids ? (
+            <div className="pl-1 flex flex-col gap-2">
+              {kids.map((k) => (
+                <label key={k.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox checked={assigned.includes(k.id)}
+                    onCheckedChange={() =>
+                      setAssigned((a) => a.includes(k.id) ? a.filter((x) => x !== k.id) : [...a, k.id])
+                    } />
+                  {k.avatar} {k.name}
+                </label>
+              ))}
+              {!kids.length ? (
+                <p className="text-xs text-muted-foreground">Aún no hay niños creados.</p>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       </div>
       <div className="space-y-1.5">
         <Label>Disponibilidad</Label>
@@ -122,12 +152,14 @@ export default function ParentRewards() {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const [kids, setKids] = useState([]);
 
   const load = useCallback(async () => {
     setError(null);
     try {
       const data = await api("/parent/rewards");
       setRewards(data.rewards);
+      setKids(data.kids || []);
     } catch (e) {
       setError(e);
     }
@@ -177,6 +209,8 @@ export default function ParentRewards() {
   if (error) return <ErrorView error={error} onRetry={load} />;
   if (!rewards) return <Loading label="Cargando recompensas…" />;
 
+  const kidName = (id) => (kids.find((k) => k.id === id) || {}).name || id;
+
   return (
     <div className="space-y-6">
       <Tabs defaultValue="rewards" className="space-y-6">
@@ -201,6 +235,11 @@ export default function ParentRewards() {
             <span className="h-11 w-11 rounded-xl bg-violet-50 grid place-items-center text-2xl">{r.emoji}</span>
             <div className="flex-1 min-w-0">
               <p className="font-bold">{r.title} <span className="text-amber-600 font-extrabold text-sm">⭐ {r.cost}</span></p>
+              <p className="text-xs text-muted-foreground">
+                {r.assigned_to && r.assigned_to.length
+                  ? "Disponible para: " + r.assigned_to.map(kidName).join(", ")
+                  : "Disponible para: todos los niños"}
+              </p>
               <p className="text-xs text-muted-foreground">
                 {r.stock_mode === "unlimited" ? "Sin límite" : ""}
                 {r.stock_mode === "fixed" ? `Stock fijo: ${r.stock}` : ""}
@@ -245,6 +284,7 @@ export default function ParentRewards() {
             <RewardForm
               key={editing === "new" ? "new" : editing.id}
               initial={editing === "new" ? null : editing}
+              kids={kids}
               onSubmit={submit}
               submitting={busy}
               submitLabel={editing === "new" ? "Crear recompensa" : "Guardar cambios"}

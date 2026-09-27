@@ -1,11 +1,11 @@
 import { fmtPoints } from "@/lib/questlyApi";
 
 // 🔥 Mis rachas — progreso propio del niño con barra y mensaje motivador.
-export default function KidStreaks({ streaks = [], color = "#7c4dff" }) {
+export default function KidStreaks({ streaks = [], color = "#7c4dff", title = "🔥 Mis rachas" }) {
   if (!streaks.length) return null;
   return (
     <section className="rounded-3xl bg-white border border-slate-100 shadow-sm p-5">
-      <h2 className="font-extrabold text-lg">🔥 Mis rachas</h2>
+      <h2 className="font-extrabold text-lg">{title}</h2>
       <ul className="mt-3 space-y-5">
         {streaks.map((s) => {
           const unit = s.type === "days" ? (s.remaining === 1 ? "día" : "días") : (s.remaining === 1 ? "vez" : "veces");

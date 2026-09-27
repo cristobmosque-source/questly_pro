@@ -8,7 +8,7 @@ import {
   periodFor, isDateInstance, dueOn, dateLabel, periodLabel,
   assignmentResult, assignmentState, buildOnceAssignments, syncOnceAssignments, assignedTo,
   pubKid, newId, addTxn, kidTxns, pubTxn, allTxns,
-  kidQuests, dayItems, daySummary, pubReward, goalFor,
+  kidQuests, dayItems, daySummary, pubReward, goalFor, kidGoals, rewardForKid,
   claimsPending, redemptionsPending, pendingReviews, todayRows, yesterdayRows,
   applyStreaksOnDecision, breakDayStreaks, streaksForKid, collectCelebrations, pubStreak,
   validateStreak, removeStreak, pruneBackups, listBackups, resetProgress, restoreBackup,
@@ -121,7 +121,7 @@ export async function handle(state, method, path, body, token) {
       streaks: streaksForKid(state, kid),
       celebrations: collectCelebrations(state, kid),
       goal: g.goal, goal_chosen: g.chosen, goal_reached: g.reached,
-      affordable: state.rewards.filter((r) => r.active && r.cost <= kid.points).map(pubReward),
+      affordable: state.rewards.filter((r) => r.active && rewardForKid(r, kid.id) && r.cost <= kid.points).map(pubReward),
       history: kidTxns(state, kid.id).slice(0, 6),
     };
   }
@@ -243,10 +243,12 @@ export async function handle(state, method, path, body, token) {
     const kid = requireKid(state, token);
     return {
       kid: pubKid(kid),
-      rewards: state.rewards.filter((r) => r.active).map(pubReward),
+      // El niño solo ve las recompensas disponibles para él.
+      rewards: state.rewards.filter((r) => r.active && rewardForKid(r, kid.id)).map(pubReward),
       pending: state.redemptions.filter((r) => r.kid_id === kid.id && r.status === "pending")
         .map((r) => ({ id: r.id, emoji: r.emoji, title: r.title, at: r.at })),
-      goal_id: kid.goal_id,
+      goals: kidGoals(state, kid).map((r) => ({ id: r.id, title: r.title, emoji: r.emoji, cost: r.cost })),
+      streaks: streaksForKid(state, kid),
     };
   }
 
@@ -254,6 +256,7 @@ export async function handle(state, method, path, body, token) {
     const kid = requireKid(state, token);
     const reward = state.rewards.find((r) => r.id === m[1]);
     if (!reward || !reward.active) throw new ApiError("Esta recompensa ya no está disponible.");
+    if (!rewardForKid(reward, kid.id)) throw new ApiError("Esta recompensa no está disponible para ti.");
     if (reward.stock_mode === "fixed" && reward.stock <= 0) throw new ApiError("Se agotó. ¡Qué popular!");
     if (state.redemptions.some((r) => r.reward_id === reward.id && r.kid_id === kid.id && r.status === "pending"))
       throw new ApiError("Ya la pediste — espera a que te la entreguen.");
@@ -287,15 +290,21 @@ export async function handle(state, method, path, body, token) {
 
   if (method === "POST" && path === "/kid/goal/clear") {
     const kid = requireKid(state, token);
-    kid.goal_id = null;
-    return { message: "Meta quitada." };
+    kid.goal_ids = [];
+    return { message: "Metas quitadas." };
   }
 
+  // Poner o quitar una meta: el mismo endpoint alterna (sin duplicar).
   if (method === "POST" && (m = path.match(/^\/kid\/goal\/([^/]+)$/))) {
     const kid = requireKid(state, token);
-    const reward = state.rewards.find((r) => r.id === m[1] && r.active);
+    const reward = state.rewards.find((r) => r.id === m[1] && r.active && rewardForKid(r, kid.id));
     if (!reward) throw new ApiError("Esa recompensa ya no existe.");
-    kid.goal_id = reward.id;
+    const ids = Array.isArray(kid.goal_ids) ? kid.goal_ids.slice() : (kid.goal_id ? [kid.goal_id] : []);
+    if (ids.includes(reward.id)) {
+      kid.goal_ids = ids.filter((x) => x !== reward.id);
+      return { message: "Meta quitada." };
+    }
+    kid.goal_ids = [...ids, reward.id];
     return { message: "¡Nueva meta! ¡A por ella!" };
   }
 
@@ -779,12 +788,15 @@ export async function handle(state, method, path, body, token) {
 
   if (method === "GET" && path === "/parent/rewards") {
     requireParent(state, token);
-    return { rewards: state.rewards };
+    return {
+      rewards: state.rewards,
+      kids: state.kids.map((k) => ({ id: k.id, name: k.name, avatar: k.avatar })),
+    };
   }
 
   if (method === "POST" && path === "/parent/rewards") {
     requireParent(state, token);
-    state.rewards.push({ id: newId(state), active: true, ...validateReward(body) });
+    state.rewards.push({ id: newId(state), active: true, ...validateReward(state, body) });
     return { rewards: state.rewards, message: "Recompensa creada." };
   }
 
@@ -798,10 +810,14 @@ export async function handle(state, method, path, body, token) {
     }
     if (body.action === "delete") {
       state.rewards = state.rewards.filter((r) => r.id !== reward.id);
-      state.kids.forEach((k) => { if (k.goal_id === reward.id) k.goal_id = null; });
+      state.kids.forEach((k) => {
+        const ids = Array.isArray(k.goal_ids) ? k.goal_ids : (k.goal_id ? [k.goal_id] : []);
+        k.goal_ids = ids.filter((id) => id !== reward.id);
+        k.goal_id = null;
+      });
       return { rewards: state.rewards, message: "Recompensa eliminada." };
     }
-    Object.assign(reward, validateReward(body));
+    Object.assign(reward, validateReward(state, body));
     return { rewards: state.rewards, message: "Recompensa actualizada." };
   }
 
@@ -821,7 +837,7 @@ export async function handle(state, method, path, body, token) {
       id: newId(state), name: name.slice(0, 40),
       avatar: String(body.avatar || "🦊").slice(0, 4),
       color: /^#[0-9a-fA-F]{6}$/.test(body.color || "") ? body.color : "#7c4dff",
-      pin: pin ? await sha256Hex(pin) : null, points, lifetime_points: points, goal_id: null,
+      pin: pin ? await sha256Hex(pin) : null, points, lifetime_points: points, goal_id: null, goal_ids: [],
     };
     state.kids.push(kid);
     return { kids: state.kids.map(pubKid), message: "¡" + kid.name + " se unió a la familia!" };
@@ -841,6 +857,9 @@ export async function handle(state, method, path, body, token) {
       redemptions: state.redemptions.filter((r) => r.kid_id === kid.id)
         .map((r) => ({ id: r.id, emoji: r.emoji, title: r.title, cost: r.cost, at: r.at, status: r.status }))
         .sort((a, b) => (a.at < b.at ? 1 : -1)),
+      rewards_available: state.rewards.filter((r) => r.active && rewardForKid(r, kid.id)).map(pubReward),
+      goals: kidGoals(state, kid).map((r) => ({ id: r.id, title: r.title, emoji: r.emoji, cost: r.cost })),
+      streaks: streaksForKid(state, kid),
     };
   }
 

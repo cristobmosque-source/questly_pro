@@ -301,20 +301,32 @@ export function pubReward(r) {
   };
 }
 
+// Una recompensa sin niños asignados está disponible para toda la familia.
+export const rewardForKid = (r, kidId) =>
+  !r.assigned_to || !r.assigned_to.length || r.assigned_to.includes(kidId);
+
+// Metas elegidas por el niño (compatible con el campo antiguo goal_id):
+// una meta solo cuenta si la recompensa sigue activa y disponible para él.
+export function kidGoals(state, kid) {
+  const ids = Array.isArray(kid.goal_ids) ? kid.goal_ids : (kid.goal_id ? [kid.goal_id] : []);
+  return ids
+    .map((id) => state.rewards.find((r) => r.active && rewardForKid(r, kid.id) && r.id === id))
+    .filter(Boolean);
+}
+
 export function goalFor(state, kid) {
-  const rewards = state.rewards.filter((r) => r.active);
-  let goal = null, chosen = false;
-  if (kid.goal_id) {
-    const r = rewards.find((x) => x.id === kid.goal_id);
-    if (r) { goal = r; chosen = true; }
-  }
+  const chosen = kidGoals(state, kid);
+  let goal = chosen[0] || null;
   if (!goal) {
-    const next = rewards.filter((r) => r.cost > kid.points).sort((a, b) => a.cost - b.cost)[0];
+    const next = state.rewards
+      .filter((r) => r.active && rewardForKid(r, kid.id) && r.cost > kid.points)
+      .sort((a, b) => a.cost - b.cost)[0];
     if (next) goal = next;
   }
   return {
     goal: goal ? { id: goal.id, title: goal.title, emoji: goal.emoji, cost: goal.cost } : null,
-    chosen, reached: !!(goal && kid.points >= goal.cost),
+    chosen: chosen.length > 0,
+    reached: !!(goal && kid.points >= goal.cost),
   };
 }
 
@@ -548,7 +560,7 @@ export function pruneBackups(state) {
 
 function snapshotProgress(state) {
   return {
-    kids: state.kids.map((k) => ({ id: k.id, points: k.points, lifetime_points: k.lifetime_points, goal_id: k.goal_id })),
+    kids: state.kids.map((k) => ({ id: k.id, points: k.points, lifetime_points: k.lifetime_points, goal_ids: k.goal_ids || (k.goal_id ? [k.goal_id] : []) })),
     txns: state.txns.slice(),
     claims: state.claims.slice(),
     misses: state.misses.slice(),
@@ -597,7 +609,7 @@ export function resetProgress(state) {
   state.steps = [];
   state.redemptions = [];
   state.streak_progress = {};
-  state.kids.forEach((k) => { k.points = 0; k.lifetime_points = 0; k.goal_id = null; });
+  state.kids.forEach((k) => { k.points = 0; k.lifetime_points = 0; k.goal_ids = []; k.goal_id = null; });
   state.assignments = [];
   for (const q of state.quests) {
     if (q.repeat !== "once" || !q.active) continue;
@@ -630,7 +642,7 @@ export function restoreBackup(state, id) {
   state.streak_progress = JSON.parse(JSON.stringify(d.streak_progress || {}));
   d.kids.forEach((bk) => {
     const k = state.kids.find((x) => x.id === bk.id);
-    if (k) { k.points = bk.points; k.lifetime_points = bk.lifetime_points; k.goal_id = bk.goal_id; }
+    if (k) { k.points = bk.points; k.lifetime_points = bk.lifetime_points; k.goal_ids = bk.goal_ids || (bk.goal_id ? [bk.goal_id] : []); }
   });
   return { message: "Copia restaurada: puntos, historial y rachas volvieron a como estaban antes del reinicio." };
 }
@@ -671,13 +683,16 @@ export function validateQuest(state, body) {
   };
 }
 
-export function validateReward(body) {
+export function validateReward(state, body) {
   const title = String(body.title || "").trim();
   if (!title) throw new ApiError("Ponle un nombre a la recompensa.");
   const cost = Number(body.cost);
   if (!Number.isFinite(cost) || cost < 1 || cost > 100000)
     throw new ApiError("El costo debe estar entre 1 y 100000 puntos (1000 puntos = $1.000).");
   const stock_mode = ["unlimited", "fixed", "periodic"].includes(body.stock_mode) ? body.stock_mode : "unlimited";
+  // Niños que pueden usarla: lista vacía = disponible para todos.
+  const assigned_to = (Array.isArray(body.assigned_to) ? body.assigned_to : [])
+    .filter((id) => state.kids.some((k) => k.id === id));
   return {
     title: title.slice(0, 80),
     emoji: String(body.emoji || "🎁").slice(0, 4),
@@ -687,5 +702,6 @@ export function validateReward(body) {
     stock_limit: Math.max(1, Math.min(999, Number(body.stock_limit) || 1)),
     stock_period: ["daily", "weekly", "monthly"].includes(body.stock_period) ? body.stock_period : "daily",
     stock_scope: body.stock_scope === "family" ? "family" : "child",
+    assigned_to,
   };
 }

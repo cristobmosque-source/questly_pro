@@ -22,6 +22,9 @@ export default function RewardCard({ reward, points, isGoal, onBuy, onSetGoal, b
           <p className="text-xs text-muted-foreground">
             💰 {fmtMoney(reward.cost)}{reward.stock_text ? " · " + reward.stock_text : ""}
           </p>
+          <p className={"text-xs font-bold " + (reward.sold_out ? "text-rose-500" : canBuy ? "text-emerald-600" : "text-amber-600")}>
+            {reward.sold_out ? "Agotada" : canBuy ? "✓ ¡Puedes canjearla!" : `Te faltan ⭐ ${fmtPoints(reward.cost - points)}`}
+          </p>
         </div>
         <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-200 px-2.5 py-0.5 text-sm font-extrabold text-amber-700">
           <Star className="h-3.5 w-3.5" /> {fmtPoints(reward.cost)}
